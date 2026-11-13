@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">StudyLock</string>
+    <string name="accessibility_label">StudyLock · Filtro de estudio</string>
+    <string name="accessibility_summary">Detecta cuándo abres una app que decidiste limitar</string>
+    <string name="accessibility_description">StudyLock usa el servicio de accesibilidad solo para saber qué aplicación está en pantalla. No lee, guarda ni comparte el contenido de tus apps.</string>
+</resources>

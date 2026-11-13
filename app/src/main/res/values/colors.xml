@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="sl_navy">#FF1B2850</color>
+    <color name="sl_primary">#FF283B70</color>
+    <color name="sl_white">#FFFFFFFF</color>
+    <color name="sl_background">#FFF5F7FB</color>
+</resources>

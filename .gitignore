@@ -1,0 +1,15 @@
+*.iml
+.gradle/
+local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+kotlin-js-store/
+
+# Espejo Maven local (artefactos binarios grandes). Ver local-repo/README.md
+local-repo/androidx/
