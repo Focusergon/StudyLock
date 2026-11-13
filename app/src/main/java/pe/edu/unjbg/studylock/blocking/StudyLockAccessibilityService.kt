@@ -20,12 +20,14 @@ class StudyLockAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED
-        ) {
-            return
-        }
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val packageName = event.packageName?.toString() ?: return
+        val className = event.className?.toString().orEmpty()
+        // TYPE_WINDOW_STATE_CHANGED también se dispara para ventanas auxiliares (popups,
+        // animaciones de cierre, etc.) que NO son la app en primer plano. Esas ventanas tienen
+        // una clase de framework (android.widget.*, android.view.*); las pantallas reales
+        // exponen una Activity. Descartarlas evita falsos bloqueos y un estado "pegado".
+        if (className.startsWith("android.")) return
         graph.gate.onForeground(packageName)
     }
 

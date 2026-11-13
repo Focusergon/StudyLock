@@ -18,8 +18,10 @@ se descuentan solo mientras usas esa app.
 - `BlockingGate` decide: dejar pasar, iniciar acceso o abrir la pantalla de bloqueo.
 - `BlockingActivity` muestra el reto de 2 preguntas y el resultado con los minutos ganados.
 - `AccessTimerService` (foreground service) hace la cuenta regresiva y consume minutos reales.
-- El temporizador **se pausa solo** cuando la app limitada deja de estar visible (accesibilidad o,
-  como respaldo, `UsageStatsManager`): no se gastan minutos navegando en otra parte.
+- El temporizador **se pausa solo** cuando la app limitada deja de estar visible: el primer plano
+  se reconstruye con los eventos `ACTIVITY_RESUMED`/`ACTIVITY_PAUSED` de `UsageStatsManager`
+  (fuente principal) y se contrasta con el último paquete observado por accesibilidad. Así no se
+  gastan minutos navegando en otra parte y el saldo mostrado coincide con el real.
 - Al llegar a cero, se vuelve a bloquear automáticamente.
 - **Desbloqueo de emergencia** de 2 minutos con espera de 20 minutos entre usos.
 - Estado del temporizador persistido en `SharedPreferences`, sobrevive a la muerte del proceso.
@@ -188,6 +190,8 @@ para la comunidad UNJBG. `isAccessibilityTool="false"` está declarado en la con
 - La detección depende del servicio de accesibilidad; si el usuario lo desactiva, el bloqueo
   se degrada (el temporizador usa `UsageStatsManager` como respaldo, pero no hay intercepción
   automática sin accesibilidad).
+- El servicio de accesibilidad debe estar **conectado** para interceptar; tras una reinstalación
+  del APK conviene revisar en Ajustes que siga activo.
 - La lista de apps conocidas para preselección es estática; se puede ampliar en
   `InstalledAppsLoader.knownCategories`.
 - Hay tests JVM de la lógica pura (`RewardPolicy`, `ReviewScheduler`, `TimeUtils`), pero todavía

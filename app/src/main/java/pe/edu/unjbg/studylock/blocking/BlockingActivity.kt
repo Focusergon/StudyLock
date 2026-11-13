@@ -57,10 +57,20 @@ class BlockingActivity : ComponentActivity() {
                             finish()
                         }
                     },
-                    onDismiss = { finish() },
+                    onDismiss = { goHome() },
                 )
             }
         }
+    }
+
+    /** "Volver" debe sacar al usuario de la app limitada, no dejarlo dentro para re-bloquear. */
+    private fun goHome() {
+        val home = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { startActivity(home) }
+        finish()
     }
 
     override fun onNewIntent(intent: Intent) {

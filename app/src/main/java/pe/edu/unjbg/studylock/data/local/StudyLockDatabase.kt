@@ -27,6 +27,13 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
+    init {
+        // Sembramos el replay con un valor inicial: así cualquier colector nuevo (p. ej. el
+        // dashboard tras abrir la app) recibe datos de inmediato, incluso si aún no ha habido
+        // ninguna escritura en esta sesión de proceso.
+        _changes.tryEmit(Unit)
+    }
+
     /** Emite cada vez que cambia cualquier tabla. Base de la reactividad de los repositorios. */
     val changes: Flow<Unit> = _changes
 

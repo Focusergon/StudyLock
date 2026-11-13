@@ -65,10 +65,14 @@ class BlockingGate(
 
     /** Llamado por el AccessibilityService en cada cambio de ventana. */
     fun onForeground(packageName: String) {
-        if (packageName.isBlank() || packageName in SYSTEM_PACKAGES) return
-        // También registramos nuestra propia app: así el temporizador se pausa mientras el
-        // usuario está en StudyLock y no consume minutos de más.
+        if (packageName.isBlank()) return
+        // Registramos SIEMPRE el paquete real en primer plano, incluso si es de sistema o es
+        // nuestra propia app: así el temporizador sabe cuándo la app limitada dejó de estar
+        // visible y pausa la cuenta (en vez de quedarse pegado al último paquete bloqueado).
         accessStore.lastForegroundPackage = packageName
+        // El bloqueo solo aplica a apps de usuario; los paquetes de sistema y el nuestro se
+        // registran arriba pero no se evalúan.
+        if (packageName in SYSTEM_PACKAGES) return
         if (packageName == context.packageName) return
         if (packageName !in blockedPackages) return
         scope.launch { evaluate(packageName) }

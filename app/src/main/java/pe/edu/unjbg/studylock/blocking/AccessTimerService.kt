@@ -114,16 +114,18 @@ class AccessTimerService : Service() {
     }
 
     /**
-     * Con accesibilidad activa basta con el último paquete observado (gratis y en tiempo real).
-     * Sin ella se consulta UsageStatsManager como respaldo; si tampoco hay permiso, se cuenta
-     * siempre para no regalar tiempo por un permiso faltante.
+     * Decide si la app con acceso activo está realmente visible.
+     *
+     * Fuente principal: UsageStatsManager (fiable aunque se pierdan eventos sueltos de
+     * accesibilidad). Respaldo: el último paquete observado por accesibilidad. Si no hay
+     * ningún dato fiable se cuenta, para no regalar minutos por un permiso faltante.
      */
     private fun isTargetForeground(): Boolean {
         val target = accessStore.activePackage ?: return false
+        ForegroundApp.current(this)?.let { return it == target }
         val observed = accessStore.lastForegroundPackage
-        if (observed == target) return true
-        if (observed.isNotEmpty() && graph.gate.accessibilityConnected) return false
-        return ForegroundApp.current(this)?.let { it == target } ?: true
+        if (observed.isNotEmpty() && graph.gate.accessibilityConnected) return observed == target
+        return true
     }
 
     private fun chargeMinutes(count: Int) {
