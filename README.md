@@ -76,6 +76,36 @@ APK generado en `app/build/outputs/apk/debug/app-debug.apk`.
 > en redes inestables esa descarga falla y rompe el build. Se puede borrar cuando la red sea
 > estable; Gradle volverá a resolver desde `google()`. Detalles en `local-repo/README.md`.
 
+### Firma de release (APK firmado)
+
+El APK de release se firma con un keystore local cuyas credenciales **no se versionan**
+(`keystore.properties` y `*.jks` están en `.gitignore`).
+
+1. Genera el keystore (una sola vez, guárdalo en un lugar seguro):
+
+   ```bash
+   keytool -genkeypair -v -keystore studylock-release.jks -alias studylock \
+     -keyalg RSA -keysize 4096 -validity 10000 -storetype PKCS12 \
+     -storepass <PASSWORD> -keypass <PASSWORD> \
+     -dname "CN=StudyLock UNJBG, OU=UNJBG, O=StudyLock, L=Tacna, ST=Tacna, C=PE"
+   ```
+
+2. Copia `keystore.properties.example` a `keystore.properties` y rellena `storePassword`/`keyPassword`.
+
+3. Compila y verifica:
+
+   ```bash
+   ./gradlew :app:assembleRelease
+   $ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+   ```
+
+APK firmado en `app/build/outputs/apk/release/app-release.apk`. Si `keystore.properties` no
+existe, la build de release sigue funcionando pero genera un APK sin firmar
+(`app-release-unsigned.apk`).
+
+> **Importante**: si pierdes el keystore o su contraseña no podrás publicar actualizaciones de
+> la app con la misma identidad. Respalda `studylock-release.jks` y la contraseña.
+
 ### Stack
 - Kotlin + Jetpack Compose (Material 3), `minSdk 26`, `compileSdk/targetSdk 37`.
 - AGP **9.5.1** con **Kotlin integrado** (no se aplica `org.jetbrains.kotlin.android`).

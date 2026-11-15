@@ -13,3 +13,8 @@ kotlin-js-store/
 
 # Espejo Maven local (artefactos binarios grandes). Ver local-repo/README.md
 local-repo/androidx/
+
+# Firma de release: NUNCA subir el keystore ni sus credenciales.
+keystore.properties
+*.jks
+*.keystore
