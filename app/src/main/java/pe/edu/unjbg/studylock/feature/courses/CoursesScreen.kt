@@ -1,6 +1,7 @@
 package pe.edu.unjbg.studylock.feature.courses
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,7 +51,7 @@ import pe.edu.unjbg.studylock.ui.masteryColor
 import pe.edu.unjbg.studylock.ui.masteryLabel
 
 @Composable
-fun CoursesScreen(ui: CoursesUi, onOpenCourse: (String) -> Unit, onQuickReview: () -> Unit) {
+fun CoursesScreen(ui: CoursesUi, onOpenCourse: (String) -> Unit, onQuickReview: () -> Unit, onImport: () -> Unit) {
     SlScreen {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -98,6 +100,40 @@ fun CoursesScreen(ui: CoursesUi, onOpenCourse: (String) -> Unit, onQuickReview: 
                 }
             }
 
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(SlColors.Surface)
+                        .border(1.dp, SlColors.Border, RoundedCornerShape(20.dp))
+                        .clickable(onClick = onImport)
+                        .padding(18.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(SlColors.ChipBlue),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null, tint = SlColors.Primary)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Importar contenido", style = MaterialTheme.typography.titleMedium, color = SlColors.Ink)
+                            Text(
+                                text = "Aula Virtual, texto o archivo .pdf",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlColors.Muted,
+                            )
+                        }
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = SlColors.Muted)
+                    }
+                }
+            }
+
             if (ui.courses.isEmpty() && !ui.loading) {
                 item {
                     SlCard {
@@ -110,10 +146,16 @@ fun CoursesScreen(ui: CoursesUi, onOpenCourse: (String) -> Unit, onQuickReview: 
                                 color = SlColors.Ink,
                             )
                             Text(
-                                "Conecta tu cuenta UNJBG para importarlos.",
+                                "Conecta tu cuenta UNJBG o importa tu material para empezar.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = SlColors.Muted,
                                 textAlign = TextAlign.Center,
+                            )
+                            Spacer(Modifier.height(14.dp))
+                            SlPrimaryButton(
+                                text = "Importar contenido",
+                                onClick = onImport,
+                                icon = Icons.Filled.Add,
                             )
                         }
                     }

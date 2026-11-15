@@ -1,9 +1,14 @@
 package pe.edu.unjbg.studylock.domain.repo
 
 import kotlinx.coroutines.flow.Flow
+import pe.edu.unjbg.studylock.domain.content.GeneratedTopic
 import pe.edu.unjbg.studylock.domain.model.BlockedApp
+import pe.edu.unjbg.studylock.domain.model.ClassBlock
 import pe.edu.unjbg.studylock.domain.model.Course
 import pe.edu.unjbg.studylock.domain.model.Dashboard
+import pe.edu.unjbg.studylock.domain.model.ImportResult
+import pe.edu.unjbg.studylock.domain.model.ImportSource
+import pe.edu.unjbg.studylock.domain.model.ImportSourceKind
 import pe.edu.unjbg.studylock.domain.model.MinuteTx
 import pe.edu.unjbg.studylock.domain.model.Question
 import pe.edu.unjbg.studylock.domain.model.SessionKind
@@ -52,4 +57,26 @@ interface StatsRepository {
     fun observeWeekly(): Flow<WeeklyProgress>
     suspend fun todayEarned(): Int
     suspend fun todayQuestions(): Int
+}
+
+/** Importa material académico (texto, archivo o Aula Virtual) como curso con temas y preguntas. */
+interface ContentRepository {
+    fun observeSources(): Flow<List<ImportSource>>
+    suspend fun importCourse(
+        courseName: String,
+        professor: String,
+        topics: List<GeneratedTopic>,
+        kind: ImportSourceKind,
+        sourceTitle: String,
+    ): ImportResult
+    suspend fun deleteSource(sourceId: String)
+}
+
+/** Horario de clases del estudiante, base de las notificaciones inteligentes. */
+interface ScheduleRepository {
+    fun observe(): Flow<List<ClassBlock>>
+    suspend fun add(block: ClassBlock)
+    suspend fun remove(id: String)
+    suspend fun blocksForDay(dayOfWeek: Int): List<ClassBlock>
+    suspend fun all(): List<ClassBlock>
 }

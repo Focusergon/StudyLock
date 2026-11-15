@@ -11,6 +11,8 @@ object Routes {
     const val PROGRESS = "progress"
     const val SETTINGS = "settings"
 
+    const val IMPORT = "import"
+
     const val COURSE_DETAIL = "course/{courseId}"
     const val START_REVIEW = "start_review/{courseId}"
     const val SESSION = "session/{courseId}"

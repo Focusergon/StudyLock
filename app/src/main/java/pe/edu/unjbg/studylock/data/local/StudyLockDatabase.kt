@@ -47,22 +47,19 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        TABLES.forEach { db.execSQL("DROP TABLE IF EXISTS $it") }
-        onCreate(db)
+        // Migración aditiva: el esquema usa CREATE … IF NOT EXISTS, así que aplicarlo sobre una
+        // base existente solo crea lo que falte (por ejemplo, las tablas de horario e importación)
+        // sin borrar el progreso del estudiante.
+        SCHEMA.forEach(db::execSQL)
     }
 
     companion object {
         private const val NAME = "studylock.db"
-        private const val VERSION = 1
-
-        private val TABLES = listOf(
-            "courses", "topics", "questions", "options", "answers",
-            "sessions", "minute_tx", "blocked_apps", "daily_stats",
-        )
+        private const val VERSION = 2
 
         private val SCHEMA = listOf(
             """
-            CREATE TABLE courses(
+            CREATE TABLE IF NOT EXISTS courses(
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 professor TEXT NOT NULL DEFAULT '',
@@ -72,7 +69,7 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
             )
             """.trimIndent(),
             """
-            CREATE TABLE topics(
+            CREATE TABLE IF NOT EXISTS topics(
                 id TEXT PRIMARY KEY,
                 course_id TEXT NOT NULL,
                 name TEXT NOT NULL,
@@ -86,7 +83,7 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
             )
             """.trimIndent(),
             """
-            CREATE TABLE questions(
+            CREATE TABLE IF NOT EXISTS questions(
                 id TEXT PRIMARY KEY,
                 topic_id TEXT NOT NULL,
                 prompt TEXT NOT NULL,
@@ -96,7 +93,7 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
             )
             """.trimIndent(),
             """
-            CREATE TABLE options(
+            CREATE TABLE IF NOT EXISTS options(
                 id TEXT PRIMARY KEY,
                 question_id TEXT NOT NULL,
                 text TEXT NOT NULL,
@@ -105,7 +102,7 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
             )
             """.trimIndent(),
             """
-            CREATE TABLE answers(
+            CREATE TABLE IF NOT EXISTS answers(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT,
                 question_id TEXT NOT NULL,
@@ -116,7 +113,7 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
             )
             """.trimIndent(),
             """
-            CREATE TABLE sessions(
+            CREATE TABLE IF NOT EXISTS sessions(
                 id TEXT PRIMARY KEY,
                 course_id TEXT,
                 kind TEXT NOT NULL,
@@ -128,7 +125,7 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
             )
             """.trimIndent(),
             """
-            CREATE TABLE minute_tx(
+            CREATE TABLE IF NOT EXISTS minute_tx(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 minutes INTEGER NOT NULL,
                 kind TEXT NOT NULL,
@@ -137,7 +134,7 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
             )
             """.trimIndent(),
             """
-            CREATE TABLE blocked_apps(
+            CREATE TABLE IF NOT EXISTS blocked_apps(
                 package TEXT PRIMARY KEY,
                 label TEXT NOT NULL,
                 category TEXT NOT NULL DEFAULT 'Otras',
@@ -146,7 +143,7 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
             )
             """.trimIndent(),
             """
-            CREATE TABLE daily_stats(
+            CREATE TABLE IF NOT EXISTS daily_stats(
                 day TEXT PRIMARY KEY,
                 minutes INTEGER NOT NULL DEFAULT 0,
                 questions INTEGER NOT NULL DEFAULT 0,
@@ -155,10 +152,32 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
                 spent INTEGER NOT NULL DEFAULT 0
             )
             """.trimIndent(),
-            "CREATE INDEX idx_topics_course ON topics(course_id)",
-            "CREATE INDEX idx_questions_topic ON questions(topic_id)",
-            "CREATE INDEX idx_answers_created ON answers(created_at)",
-            "CREATE INDEX idx_tx_created ON minute_tx(created_at)",
+            """
+            CREATE TABLE IF NOT EXISTS class_blocks(
+                id TEXT PRIMARY KEY,
+                course_id TEXT NOT NULL DEFAULT '',
+                course_name TEXT NOT NULL,
+                day_of_week INTEGER NOT NULL,
+                start_minute INTEGER NOT NULL,
+                end_minute INTEGER NOT NULL,
+                room TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+            """
+            CREATE TABLE IF NOT EXISTS import_sources(
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                title TEXT NOT NULL,
+                course_id TEXT NOT NULL DEFAULT '',
+                question_count INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+            "CREATE INDEX IF NOT EXISTS idx_topics_course ON topics(course_id)",
+            "CREATE INDEX IF NOT EXISTS idx_questions_topic ON questions(topic_id)",
+            "CREATE INDEX IF NOT EXISTS idx_answers_created ON answers(created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_tx_created ON minute_tx(created_at)",
         )
     }
 }

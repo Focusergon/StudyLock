@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.School
@@ -48,7 +49,7 @@ import pe.edu.unjbg.studylock.core.util.PermissionUtils
 import pe.edu.unjbg.studylock.ui.rememberPermissionStatus
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onResetOnboarding: () -> Unit) {
+fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onResetOnboarding: () -> Unit) {
     val context = LocalContext.current
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val permissions = rememberPermissionStatus()
@@ -199,6 +200,34 @@ fun SettingsScreen(viewModel: SettingsViewModel, onResetOnboarding: () -> Unit) 
                             onCheckedChange = viewModel::setEmergency,
                             colors = SwitchDefaults.colors(checkedTrackColor = SlColors.Teal),
                         )
+                    }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(2.dp))
+                SlSectionLabel("Contenido")
+            }
+
+            item {
+                SlCard(onClick = onImport) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SlIconBadge(
+                            icon = Icons.Filled.CloudDownload,
+                            tint = SlColors.Primary,
+                            background = SlColors.ChipBlue,
+                            size = 38.dp,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Importar contenido", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+                            Text(
+                                "Aula Virtual UNJBG, texto pegado o archivo .pdf",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlColors.Muted,
+                            )
+                        }
+                        SlPill("Nuevo", SlColors.Teal, SlColors.Mint)
                     }
                 }
             }

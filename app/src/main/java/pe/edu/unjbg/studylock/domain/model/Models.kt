@@ -150,3 +150,54 @@ data class AccessPlan(
     val label: String,
     val remainingSeconds: Int,
 )
+
+/** Origen del contenido importado. */
+enum class ImportSourceKind { TEXT, FILE, MOODLE }
+
+/** Registro de una importación de contenido (texto pegado, archivo o Aula Virtual). */
+data class ImportSource(
+    val id: String,
+    val kind: ImportSourceKind,
+    val title: String,
+    val courseId: String,
+    val questionCount: Int,
+    val createdAt: Long,
+)
+
+/** Resultado de importar un curso con sus temas y preguntas. */
+data class ImportResult(
+    val courseId: String,
+    val courseName: String,
+    val topicCount: Int,
+    val questionCount: Int,
+)
+
+/**
+ * Bloque del horario de clases del estudiante.
+ *
+ * [dayOfWeek] usa la numeración ISO (1 = lunes … 7 = domingo) y las horas son minutos desde las
+ * 00:00, para que la lógica de «periodos libres» no dependa de zonas horarias.
+ */
+data class ClassBlock(
+    val id: String,
+    val courseId: String,
+    val courseName: String,
+    val dayOfWeek: Int,
+    val startMinute: Int,
+    val endMinute: Int,
+    val room: String = "",
+) {
+    val startLabel: String get() = formatMinute(startMinute)
+    val endLabel: String get() = formatMinute(endMinute)
+    val dayLabel: String get() = DAY_LABELS[(dayOfWeek - 1).coerceIn(0, 6)]
+
+    fun contains(minuteOfDay: Int): Boolean = minuteOfDay in startMinute until endMinute
+
+    companion object {
+        val DAY_LABELS = listOf("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+        val DAY_SHORT = listOf("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
+
+        fun formatMinute(minute: Int): String =
+            "%02d:%02d".format(minute / 60, minute % 60)
+    }
+}

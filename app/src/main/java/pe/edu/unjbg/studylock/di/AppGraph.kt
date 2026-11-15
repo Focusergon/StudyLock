@@ -7,8 +7,10 @@ import pe.edu.unjbg.studylock.data.local.StudyLockDatabase
 import pe.edu.unjbg.studylock.data.prefs.AccessStore
 import pe.edu.unjbg.studylock.data.prefs.UserPreferences
 import pe.edu.unjbg.studylock.data.repos.BlockedAppsRepositoryImpl
+import pe.edu.unjbg.studylock.data.repos.ContentRepositoryImpl
 import pe.edu.unjbg.studylock.data.repos.CourseRepositoryImpl
 import pe.edu.unjbg.studylock.data.repos.MinuteRepositoryImpl
+import pe.edu.unjbg.studylock.data.repos.ScheduleRepositoryImpl
 import pe.edu.unjbg.studylock.data.repos.StatsRepositoryImpl
 import pe.edu.unjbg.studylock.data.repos.StudyRepositoryImpl
 
@@ -31,6 +33,8 @@ class AppGraph(context: Context) {
     val minutes by lazy { MinuteRepositoryImpl(db) }
     val blockedApps by lazy { BlockedAppsRepositoryImpl(db) }
     val stats by lazy { StatsRepositoryImpl(db, prefs, courses) }
+    val content by lazy { ContentRepositoryImpl(db) }
+    val schedule by lazy { ScheduleRepositoryImpl(db) }
 
     val notifications by lazy { StudyLockNotifications(appContext) }
 

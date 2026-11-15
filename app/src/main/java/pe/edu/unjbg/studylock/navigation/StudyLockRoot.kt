@@ -7,6 +7,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -25,6 +26,8 @@ import pe.edu.unjbg.studylock.feature.courses.CoursesScreen
 import pe.edu.unjbg.studylock.feature.courses.CoursesViewModel
 import pe.edu.unjbg.studylock.feature.home.HomeScreen
 import pe.edu.unjbg.studylock.feature.home.HomeViewModel
+import pe.edu.unjbg.studylock.feature.import.ImportScreen
+import pe.edu.unjbg.studylock.feature.import.ImportViewModel
 import pe.edu.unjbg.studylock.feature.onboarding.AppSelectionScreen
 import pe.edu.unjbg.studylock.feature.onboarding.ConnectAccountScreen
 import pe.edu.unjbg.studylock.feature.onboarding.OnboardingViewModel
@@ -142,7 +145,16 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                     ui = ui,
                     onOpenCourse = { courseId -> nav.navigate(Routes.courseDetail(courseId)) },
                     onQuickReview = { nav.navigate(Routes.session(Routes.WEAK)) },
+                    onImport = { nav.navigate(Routes.IMPORT) },
                 )
+            }
+
+            composable(Routes.IMPORT) {
+                val context = LocalContext.current.applicationContext
+                val vm: ImportViewModel = viewModel(
+                    factory = viewModelFactory { ImportViewModel(context, graph.content) },
+                )
+                ImportScreen(viewModel = vm, onBack = { nav.popBackStack() })
             }
 
             composable(Routes.COURSE_DETAIL) {
@@ -180,6 +192,7 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                 )
                 SettingsScreen(
                     viewModel = vm,
+                    onImport = { nav.navigate(Routes.IMPORT) },
                     onResetOnboarding = {
                         nav.navigate(Routes.WELCOME) {
                             popUpTo(Routes.HOME) { inclusive = true }
