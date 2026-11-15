@@ -64,6 +64,7 @@ fun HomeScreen(
     onStartReview: (String) -> Unit,
     onOpenAccess: () -> Unit,
     onBrowseCourses: () -> Unit,
+    onBlockedApps: () -> Unit,
 ) {
     val dashboard = ui.dashboard
     val accessStore = LocalAppGraph.current.accessStore
@@ -232,7 +233,7 @@ fun HomeScreen(
             }
 
             item {
-                SlCard(onClick = onBrowseCourses) {
+                SlCard(onClick = onBlockedApps) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         SlIconBadge(Icons.Filled.Lock, SlColors.Danger, SlColors.DangerSoft)
                         Spacer(Modifier.width(12.dp))

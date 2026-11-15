@@ -135,6 +135,7 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                     onStartReview = { courseId -> nav.navigate(Routes.session(courseId)) },
                     onOpenAccess = { nav.navigate(Routes.ACCESS_ACTIVE) },
                     onBrowseCourses = { navigateTab(Routes.COURSES) },
+                    onBlockedApps = { nav.navigate(Routes.BLOCKED_APPS) },
                 )
             }
 
@@ -164,6 +165,17 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                     factory = viewModelFactory { ScheduleViewModel(graph.schedule, graph.courses) },
                 )
                 ScheduleScreen(viewModel = vm, onBack = { nav.popBackStack() })
+            }
+
+            composable(Routes.BLOCKED_APPS) {
+                val vm: OnboardingViewModel = viewModel(
+                    factory = viewModelFactory { OnboardingViewModel(graph.prefs, graph.blockedApps) },
+                )
+                AppSelectionScreen(
+                    viewModel = vm,
+                    onBack = { nav.popBackStack() },
+                    onDone = { nav.popBackStack() },
+                )
             }
 
             composable(Routes.COURSE_DETAIL) {
@@ -203,6 +215,7 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                     viewModel = vm,
                     onImport = { nav.navigate(Routes.IMPORT) },
                     onSchedule = { nav.navigate(Routes.SCHEDULE) },
+                    onBlockedApps = { nav.navigate(Routes.BLOCKED_APPS) },
                     onResetOnboarding = {
                         nav.navigate(Routes.WELCOME) {
                             popUpTo(Routes.HOME) { inclusive = true }

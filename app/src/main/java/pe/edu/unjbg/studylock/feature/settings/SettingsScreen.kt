@@ -51,7 +51,7 @@ import pe.edu.unjbg.studylock.core.util.PermissionUtils
 import pe.edu.unjbg.studylock.ui.rememberPermissionStatus
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onSchedule: () -> Unit, onResetOnboarding: () -> Unit) {
+fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onSchedule: () -> Unit, onBlockedApps: () -> Unit, onResetOnboarding: () -> Unit) {
     val context = LocalContext.current
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val permissions = rememberPermissionStatus()
@@ -224,6 +224,34 @@ fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onSchedul
                             Text("Horario de clases", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
                             Text(
                                 "Define tus clases para avisarte solo en ratos libres",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlColors.Muted,
+                            )
+                        }
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = SlColors.Muted)
+                    }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(2.dp))
+                SlSectionLabel("Bloqueo")
+            }
+
+            item {
+                SlCard(onClick = onBlockedApps) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SlIconBadge(
+                            icon = Icons.Filled.Lock,
+                            tint = SlColors.Danger,
+                            background = SlColors.DangerSoft,
+                            size = 38.dp,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Apps limitadas", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+                            Text(
+                                "Elige qué apps muestran el reto al agotar tus minutos",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = SlColors.Muted,
                             )
