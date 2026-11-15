@@ -21,6 +21,15 @@ object TimeUtils {
     fun dayLabel(date: LocalDate): String =
         date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.forLanguageTag("es")).uppercase(Locale.getDefault())
 
+    /** Etiqueta corta como «Lun 12» para listados de historial. */
+    fun dayShort(date: LocalDate): String {
+        val dow = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("es"))
+        return "${dow.replaceFirstChar { it.uppercase() }} ${date.dayOfMonth}"
+    }
+
+    /** Número de día del mes, para gráficos compactos. */
+    fun dayNumber(date: LocalDate): String = date.dayOfMonth.toString()
+
     fun lastNDays(n: Int, now: Long = System.currentTimeMillis()): List<LocalDate> {
         val today = Instant.ofEpochMilli(now).atZone(ZoneId.systemDefault()).toLocalDate()
         return (n - 1 downTo 0).map { today.minusDays(it.toLong()) }

@@ -14,11 +14,14 @@ import pe.edu.unjbg.studylock.data.local.list
 import pe.edu.unjbg.studylock.data.local.str
 import pe.edu.unjbg.studylock.data.prefs.Prefs
 import pe.edu.unjbg.studylock.data.prefs.UserPreferences
+import pe.edu.unjbg.studylock.domain.HistoryStats
 import pe.edu.unjbg.studylock.domain.model.BlockedApp
 import pe.edu.unjbg.studylock.domain.model.Course
 import pe.edu.unjbg.studylock.domain.model.DailyStatsRow
 import pe.edu.unjbg.studylock.domain.model.Dashboard
 import pe.edu.unjbg.studylock.domain.model.DayActivity
+import pe.edu.unjbg.studylock.domain.model.DayHistory
+import pe.edu.unjbg.studylock.domain.model.History
 import pe.edu.unjbg.studylock.domain.model.WeeklyProgress
 import pe.edu.unjbg.studylock.domain.repo.CourseRepository
 import pe.edu.unjbg.studylock.domain.repo.StatsRepository
@@ -38,6 +41,9 @@ class StatsRepositoryImpl(
 
     override fun observeWeekly(): Flow<WeeklyProgress> =
         db.changes.map { buildWeekly() }.flowOn(io)
+
+    override fun observeHistory(days: Int): Flow<History> =
+        db.changes.map { buildHistory(days) }.flowOn(io)
 
     override suspend fun todayEarned(): Int = withContext(io) { today().earned }
 
@@ -83,6 +89,44 @@ class StatsRepositoryImpl(
     }
 
     private fun balance(): Int = db.readableDatabase.count("SELECT COALESCE(SUM(minutes), 0) FROM minute_tx")
+
+    private fun buildHistory(days: Int): History {
+        val dates = TimeUtils.lastNDays(days)
+        val from = dates.first().toString()
+        val rows = db.readableDatabase.list(
+            "SELECT * FROM daily_stats WHERE day >= ?",
+            arrayOf(from),
+        ) { c ->
+            c.str("day") to DailyStatsRow(
+                questions = c.i("questions"),
+                correct = c.i("correct"),
+                earned = c.i("earned"),
+                spent = c.i("spent"),
+                minutes = c.i("minutes"),
+            )
+        }.toMap()
+
+        val list = dates.map { date ->
+            val row = rows[date.toString()] ?: DailyStatsRow()
+            DayHistory(
+                dayKey = date.toString(),
+                dayLabel = TimeUtils.dayShort(date),
+                minutes = row.minutes,
+                earned = row.earned,
+                spent = row.spent,
+                questions = row.questions,
+                correct = row.correct,
+            )
+        }
+        return History(
+            days = list,
+            totalMinutes = list.sumOf { it.minutes },
+            totalQuestions = list.sumOf { it.questions },
+            activeDays = HistoryStats.activeDays(list),
+            bestStreak = HistoryStats.bestStreak(list),
+            currentStreak = streak(),
+        )
+    }
 
     private fun today(): DailyStatsRow = db.readableDatabase.list(
         "SELECT * FROM daily_stats WHERE day = ?",

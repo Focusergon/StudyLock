@@ -5,9 +5,10 @@ agotan los minutos disponibles, abrir una app limitada (TikTok, Instagram, YouTu
 muestra un **reto rápido de 2 preguntas**. Resolverlo otorga minutos de acceso temporales que
 se descuentan solo mientras usas esa app.
 
-> Estado: **MVP funcional completo** con contenido académico de demostración (3 cursos,
-> 12 temas, 36 preguntas). El conector real del Aula Virtual / Intranet y el generador de
-> preguntas con IA están aislados detrás de repositorios para conectarlos sin reescribir la app.
+> Estado: **versión inicial completa y escalable**. Incluye el bucle de bloqueo, generación de
+> preguntas on-device a partir de tu propio material, importación desde el Aula Virtual UNJBG
+> (Moodle), horario de clases con recordatorios inteligentes e historial de minutos y rachas.
+> El generador puede sustituirse por un modelo de IA más potente sin tocar la UI.
 
 ---
 
@@ -40,7 +41,26 @@ se descuentan solo mientras usas esa app.
   del onboarding.
 - Repetición espaciada tipo SM-2 simplificada (`ReviewScheduler`) y priorización de temas
   débiles (`Topic.priority`).
-- Recordatorio diario con WorkManager (18:30, franja libre sugerida).
+
+### Importación de contenido (sin crear tarjetas a mano)
+- **Aula Virtual UNJBG (Moodle)**: conector de servicios web (`AulaVirtualClient`) que valida el
+  token móvil, lista tus cursos y descarga los documentos de cada sección.
+- **Texto pegado** o **archivo `.txt`/`.md`/`.pdf`** (extractor de PDF propio, sin dependencias).
+- `QuestionGenerator` detecta temas (encabezados) y crea preguntas de completar y de definición
+  con distractores sacados del propio material. Es determinista y se ejecuta en el dispositivo.
+- Vista previa antes de guardar e **historial de importaciones** con eliminación.
+- Reimportar un curso con el mismo nombre lo **reemplaza** en vez de duplicarlo.
+
+### Horario y notificaciones inteligentes
+- `ScheduleScreen`: registra tus clases por día (hora de inicio/fin, aula) y calcula tus
+  **franjas libres**.
+- `SmartReminder`: solo avisa cuando estás en una franja libre, no llegaste a tu meta diaria y no
+  recibiste un aviso reciente (mínimo 90 min). Nunca interrumpe una clase ni los 10 minutos
+  previos. Un `Worker` cada 30 minutos aplica la regla.
+
+### Historial y rachas
+- `StatsRepository.observeHistory`: minutos, preguntas, aciertos, días activos, mejor racha y
+  racha actual de los últimos 14 días, con gráfico y listado por día.
 
 ### Reglas de recompensa (MVP)
 | Sesión | Preguntas | Minutos |
@@ -124,16 +144,21 @@ app/src/main/java/pe/edu/unjbg/studylock/
 ├── StudyLockApp.kt              # Application: AppGraph + canales + recordatorio
 ├── core/
 │   ├── designsystem/            # Tokens, tipografía, componentes reutilizables
+│   ├── text/                    # Extractor de texto de PDF (Kotlin puro)
 │   └── util/                    # Tiempo, permisos, carga de apps instaladas
 ├── data/
+│   ├── aula/                    # Conector del Aula Virtual UNJBG (Moodle Web Services)
 │   ├── local/                   # SQLiteOpenHelper, esquema, helpers de Cursor
 │   ├── prefs/                   # DataStore (perfil/metas) y AccessStore (tiempo real)
 │   ├── repos/                   # Implementaciones de repositorios
 │   └── seed/                    # Contenido académico de demostración
 ├── di/AppGraph.kt               # Contenedor manual (único por proceso)
 ├── domain/
-│   ├── model/                   # Course, Topic, Question, MinuteTx, Dashboard…
+│   ├── content/                 # Generador de preguntas a partir de texto
+│   ├── model/                   # Course, Topic, Question, MinuteTx, ClassBlock, History…
 │   ├── repo/                    # Interfaces (contratos)
+│   ├── HistoryStats.kt          # Rachas y días activos (puro, testeable)
+│   ├── SmartReminder.kt         # Decisión de avisos en franjas libres (puro, testeable)
 │   └── RewardPolicy.kt          # SM-2 simplificado + reglas de minutos
 ├── blocking/
 │   ├── BlockingGate.kt          # Decisión central de bloqueo
@@ -145,6 +170,8 @@ app/src/main/java/pe/edu/unjbg/studylock/
 │   └── StudyLockNotifications.kt
 ├── feature/
 │   ├── onboarding/ home/ courses/ session/ progress/ settings/
+│   ├── import/                  # Importación (Aula Virtual, texto, archivo)
+│   ├── schedule/                # Horario de clases y franjas libres
 │   ├── access/                  # Pantalla de acceso temporal activo
 │   └── blocking/                # UI y ViewModel del reto
 ├── navigation/                  # Rutas + NavHost raíz
@@ -158,9 +185,10 @@ app/src/main/java/pe/edu/unjbg/studylock/
 4. La capa de bloqueo usa `suspend` + `Dispatchers.IO` y no depende de Compose.
 
 ### Puntos de extensión
-- **Conector UNJBG**: implementa `CourseRepository`/`StudyRepository` leyendo Aula Virtual y
-  escribe en las mismas tablas. La UI no cambia.
-- **Generador de preguntas**: llena `questions` y `options` (hoy lo hace `SeedContent`).
+- **Conector UNJBG**: `AulaVirtualClient` (Moodle Web Services) ya importa cursos y documentos.
+  Para SSO institucional, sustituye el token por OAuth manteniendo `ContentRepository`.
+- **Generador de preguntas**: `QuestionGenerator` (on-device) llena `questions` y `options`.
+  Reemplazarlo por un LLM es cambiar la implementación de `ContentRepository`, sin tocar la UI.
 - **Backend**: sincronización opcional de progreso; el ledger local sigue siendo la verdad en
   el dispositivo.
 - **Hilt**: reemplazar `AppGraph` por módulos, manteniendo constructores por interfaz.
@@ -195,14 +223,17 @@ desde **Ajustes → Permisos del sistema**.
 
 ## 5. Privacidad y seguridad
 
-- Todo el progreso, cursos y minutos viven en SQLite local; no hay backend en esta versión.
-- El correo institucional se guarda en DataStore. **No se almacena contraseña** en esta versión:
-  el onboarding es una vinculación local y está marcado como punto de integración futura.
+- Todo el progreso, cursos y minutos viven en SQLite local; no hay backend propio.
+- El correo institucional se guarda en DataStore. **No se almacena contraseña**: el onboarding es
+  una vinculación local y el Aula Virtual usa el **token de servicio web** que generas tú en tu
+  perfil de Moodle (Preferencias → Seguridad → Claves), no tu contraseña.
+- La app pide `INTERNET` solo para hablar con el Aula Virtual que tú indiques; el material se
+  procesa en el dispositivo y no se envía a ningún servidor.
 - El servicio de accesibilidad solo recibe el nombre del paquete en primer plano; no inspecciona
   nodos ni contenido de otras apps.
 - `allowBackup=false` y reglas de extracción excluyen bases de datos y preferencias.
-- Al integrar el Aula Virtual real: usar OAuth/SSO institucional o un backend propio con
-  cifrado en reposo, nunca credenciales en texto plano en el dispositivo.
+- Al integrar SSO institucional: usar OAuth/SSO y cifrado en reposo, nunca credenciales en texto
+  plano en el dispositivo.
 
 ### Nota sobre Google Play
 El uso de `AccessibilityService` para bloquear apps requiere justificación explícita en Play
@@ -212,10 +243,13 @@ para la comunidad UNJBG. `isAccessibilityTool="false"` está declarado en la con
 
 ---
 
-## 6. Limitaciones conocidas del MVP
+## 6. Limitaciones conocidas
 
-- El contenido académico es una **semilla de demostración**; el conector del Aula Virtual y la
-  generación automática de preguntas son los siguientes hitos.
+- La extracción de PDF es **best-effort**: funciona con PDFs de texto (Word/LaTeX), no con
+  escaneados ni fuentes CID (requerirían OCR).
+- El generador de preguntas es determinista y local; la calidad mejora al sustituirlo por un LLM.
+- El Aula Virtual requiere que el administrador de Moodle tenga habilitado el servicio web móvil
+  y que tú generes un token; no se usa SSO todavía.
 - No hay autenticación remota ni sincronización multidispositivo.
 - La detección depende del servicio de accesibilidad; si el usuario lo desactiva, el bloqueo
   se degrada (el temporizador usa `UsageStatsManager` como respaldo, pero no hay intercepción
@@ -224,20 +258,22 @@ para la comunidad UNJBG. `isAccessibilityTool="false"` está declarado en la con
   del APK conviene revisar en Ajustes que siga activo.
 - La lista de apps conocidas para preselección es estática; se puede ampliar en
   `InstalledAppsLoader.knownCategories`.
-- Hay tests JVM de la lógica pura (`RewardPolicy`, `ReviewScheduler`, `TimeUtils`), pero todavía
-  no hay tests instrumentados de UI ni pruebas en dispositivos reales.
+- Hay 46 tests JVM de la lógica pura (`RewardPolicy`, `ReviewScheduler`, `TimeUtils`,
+  `QuestionGenerator`, `PdfTextExtractor`, `SmartReminder`, `HistoryStats`, franjas libres), pero
+  todavía no hay tests instrumentados de UI ni pruebas en dispositivos reales.
 
 ---
 
 ## 7. Roadmap sugerido
 
-1. **Conector UNJBG** (Aula Virtual/Intranet) con SSO y descarga de sílabos/PDF.
-2. **Generador de preguntas** (backend o on-device) + validación docente.
-3. Notificaciones inteligentes por horario de clases (requiere horario importado).
-4. Historial de minutos y rachas con detalles semanales.
+1. **SSO institucional** para el Aula Virtual (hoy se usa el token de servicio web móvil).
+2. **Generador con IA** (backend o modelo on-device) para preguntas de mayor calidad, con
+   validación docente.
+3. **Importar horario** desde el Aula Virtual o un archivo `.ics` (hoy se registra a mano).
+4. **Sesiones ultra-cortas proactivas**: sugerir 1–2 preguntas al desbloquear el teléfono.
 5. Widget/Quick Settings para consultar saldo sin abrir la app.
 6. Migración a Room cuando KSP soporte el Kotlin integrado de AGP 9, o mantener SQLite.
-7. Tests: unitarios de dominio + Compose UI tests + pruebas en dispositivos reales.
+7. Tests: Compose UI tests + pruebas en dispositivos reales (la lógica de dominio ya está cubierta).
 
 ---
 

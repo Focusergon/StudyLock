@@ -324,7 +324,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onSchedul
                         .padding(vertical = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("StudyLock 0.1.0", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
+                    Text("StudyLock 0.2.0", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
                     Text(
                         "Hecho para estudiantes de la UNJBG",
                         style = MaterialTheme.typography.bodySmall,

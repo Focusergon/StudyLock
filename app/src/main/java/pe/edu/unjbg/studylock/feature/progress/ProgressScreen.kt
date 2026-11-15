@@ -40,6 +40,8 @@ import pe.edu.unjbg.studylock.core.designsystem.SlProgressBar
 import pe.edu.unjbg.studylock.core.designsystem.SlScreen
 import pe.edu.unjbg.studylock.core.designsystem.SlSectionLabel
 import pe.edu.unjbg.studylock.domain.model.Course
+import pe.edu.unjbg.studylock.domain.model.DayActivity
+import pe.edu.unjbg.studylock.domain.model.DayHistory
 import pe.edu.unjbg.studylock.domain.model.Mastery
 import pe.edu.unjbg.studylock.ui.masteryBackground
 import pe.edu.unjbg.studylock.ui.masteryColor
@@ -129,6 +131,66 @@ fun ProgressScreen(ui: ProgressUi) {
                 }
             }
 
+            ui.history?.let { history ->
+                item {
+                    Spacer(Modifier.height(2.dp))
+                    SlSectionLabel("Historial · últimos ${history.days.size} días")
+                }
+
+                item {
+                    SlCard {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                text = "${history.totalMinutes}",
+                                style = MaterialTheme.typography.displaySmall,
+                                color = SlColors.Ink,
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "min estudiados",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlColors.Muted,
+                                modifier = Modifier.padding(bottom = 4.dp),
+                            )
+                            Spacer(Modifier.weight(1f))
+                            SlPill(
+                                text = "${history.activeDays} días activos",
+                                textColor = SlColors.Teal,
+                                background = SlColors.Mint,
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        SlBarChart(
+                            week = history.days.map { DayActivity(it.dayKey.takeLast(2), it.minutes) },
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            ProgressStat(
+                                icon = Icons.Filled.EmojiEvents,
+                                value = "${history.bestStreak} días",
+                                label = "mejor racha",
+                                modifier = Modifier.weight(1f),
+                            )
+                            ProgressStat(
+                                icon = Icons.Filled.Bolt,
+                                value = "${history.currentStreak} días",
+                                label = "racha actual",
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Spacer(Modifier.height(2.dp))
+                    SlSectionLabel("Últimos días")
+                }
+
+                items(history.days.reversed().take(7), key = { it.dayKey }) { day ->
+                    HistoryRow(day)
+                }
+            }
+
             item {
                 Spacer(Modifier.height(2.dp))
                 SlSectionLabel("Dominio por curso")
@@ -177,6 +239,43 @@ private fun ProgressStat(icon: ImageVector, value: String, label: String, modifi
         Column {
             Text(value, style = MaterialTheme.typography.titleMedium, color = SlColors.Ink)
             Text(label, style = MaterialTheme.typography.bodySmall, color = SlColors.Muted)
+        }
+    }
+}
+
+@Composable
+private fun HistoryRow(day: DayHistory) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(SlColors.Surface)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.width(72.dp)) {
+            Text(day.dayLabel, style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+            Text("${day.minutes} min", style = MaterialTheme.typography.bodySmall, color = SlColors.Muted)
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (day.questions == 0) "Sin repaso" else "${day.questions} preguntas",
+                style = MaterialTheme.typography.bodyMedium,
+                color = SlColors.Ink,
+            )
+            Text(
+                text = if (day.questions == 0) "—" else "${day.accuracy}% de acierto",
+                style = MaterialTheme.typography.bodySmall,
+                color = SlColors.Muted,
+            )
+        }
+        if (day.questions > 0) {
+            SlPill(
+                text = "${day.accuracy}%",
+                textColor = if (day.accuracy >= 80) SlColors.Teal else SlColors.Warning,
+                background = if (day.accuracy >= 80) SlColors.Mint else Color(0xFFFDF3E4),
+            )
         }
     }
 }

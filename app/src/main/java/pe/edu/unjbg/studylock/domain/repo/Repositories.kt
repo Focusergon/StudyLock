@@ -6,6 +6,7 @@ import pe.edu.unjbg.studylock.domain.model.BlockedApp
 import pe.edu.unjbg.studylock.domain.model.ClassBlock
 import pe.edu.unjbg.studylock.domain.model.Course
 import pe.edu.unjbg.studylock.domain.model.Dashboard
+import pe.edu.unjbg.studylock.domain.model.History
 import pe.edu.unjbg.studylock.domain.model.ImportResult
 import pe.edu.unjbg.studylock.domain.model.ImportSource
 import pe.edu.unjbg.studylock.domain.model.ImportSourceKind
@@ -55,6 +56,7 @@ interface BlockedAppsRepository {
 interface StatsRepository {
     fun observeDashboard(): Flow<Dashboard>
     fun observeWeekly(): Flow<WeeklyProgress>
+    fun observeHistory(days: Int = 30): Flow<History>
     suspend fun todayEarned(): Int
     suspend fun todayQuestions(): Int
 }

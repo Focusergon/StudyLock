@@ -151,6 +151,30 @@ data class AccessPlan(
     val remainingSeconds: Int,
 )
 
+/** Un día del historial de estudio. */
+data class DayHistory(
+    val dayKey: String,
+    val dayLabel: String,
+    val minutes: Int,
+    val earned: Int,
+    val spent: Int,
+    val questions: Int,
+    val correct: Int,
+) {
+    val accuracy: Int get() = if (questions == 0) 0 else (correct * 100) / questions
+    val active: Boolean get() = questions > 0 || minutes > 0
+}
+
+/** Historial agregado de los últimos días, con rachas y totales. */
+data class History(
+    val days: List<DayHistory> = emptyList(),
+    val totalMinutes: Int = 0,
+    val totalQuestions: Int = 0,
+    val activeDays: Int = 0,
+    val bestStreak: Int = 0,
+    val currentStreak: Int = 0,
+)
+
 /** Origen del contenido importado. */
 enum class ImportSourceKind { TEXT, FILE, MOODLE }
 
