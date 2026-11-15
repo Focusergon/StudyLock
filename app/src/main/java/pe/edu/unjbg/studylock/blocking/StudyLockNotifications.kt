@@ -100,6 +100,33 @@ class StudyLockNotifications(private val context: Context) {
         runCatching { manager.notify(NOTIFY_REMINDER, notification) }
     }
 
+    /**
+     * Aviso inteligente de franja libre. [nextClass] es el siguiente bloque de clase de hoy
+     * (p. ej. «Cálculo a las 10:00») o `null` si ya no quedan clases.
+     */
+    fun notifySmartReminder(nextClass: String?) {
+        val open = PendingIntent.getActivity(
+            context,
+            14,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val text = if (nextClass != null) {
+            "Tienes una franja libre. Después: $nextClass."
+        } else {
+            "Tienes una franja libre. 5 minutos de repaso = 5 minutos de acceso."
+        }
+        val notification = NotificationCompat.Builder(context, CHANNEL_REMINDERS)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Aprovecha el hueco")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        runCatching { manager.notify(NOTIFY_REMINDER, notification) }
+    }
+
     companion object {
         const val CHANNEL_ACCESS = "access_timer"
         const val CHANNEL_REMINDERS = "reminders"

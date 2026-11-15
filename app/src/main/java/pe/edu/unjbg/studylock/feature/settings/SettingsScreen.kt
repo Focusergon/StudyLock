@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QueryStats
@@ -49,7 +51,7 @@ import pe.edu.unjbg.studylock.core.util.PermissionUtils
 import pe.edu.unjbg.studylock.ui.rememberPermissionStatus
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onResetOnboarding: () -> Unit) {
+fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onSchedule: () -> Unit, onResetOnboarding: () -> Unit) {
     val context = LocalContext.current
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val permissions = rememberPermissionStatus()
@@ -200,6 +202,33 @@ fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onResetOn
                             onCheckedChange = viewModel::setEmergency,
                             colors = SwitchDefaults.colors(checkedTrackColor = SlColors.Teal),
                         )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(SlColors.ChipBlue)
+                            .clickable(onClick = onSchedule)
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SlIconBadge(
+                            icon = Icons.Filled.CalendarMonth,
+                            tint = SlColors.Primary,
+                            background = SlColors.Surface,
+                            size = 38.dp,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Horario de clases", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+                            Text(
+                                "Define tus clases para avisarte solo en ratos libres",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlColors.Muted,
+                            )
+                        }
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = SlColors.Muted)
                     }
                 }
             }

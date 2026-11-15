@@ -35,6 +35,8 @@ import pe.edu.unjbg.studylock.feature.onboarding.PermissionsScreen
 import pe.edu.unjbg.studylock.feature.onboarding.WelcomeScreen
 import pe.edu.unjbg.studylock.feature.progress.ProgressScreen
 import pe.edu.unjbg.studylock.feature.progress.ProgressViewModel
+import pe.edu.unjbg.studylock.feature.schedule.ScheduleScreen
+import pe.edu.unjbg.studylock.feature.schedule.ScheduleViewModel
 import pe.edu.unjbg.studylock.feature.session.SessionScreen
 import pe.edu.unjbg.studylock.feature.session.StudyViewModel
 import pe.edu.unjbg.studylock.feature.settings.SettingsScreen
@@ -157,6 +159,13 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                 ImportScreen(viewModel = vm, onBack = { nav.popBackStack() })
             }
 
+            composable(Routes.SCHEDULE) {
+                val vm: ScheduleViewModel = viewModel(
+                    factory = viewModelFactory { ScheduleViewModel(graph.schedule, graph.courses) },
+                )
+                ScheduleScreen(viewModel = vm, onBack = { nav.popBackStack() })
+            }
+
             composable(Routes.COURSE_DETAIL) {
                 val courseId = it.arguments?.getString("courseId").orEmpty()
                 val vm: CourseDetailViewModel = viewModel(
@@ -193,6 +202,7 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                 SettingsScreen(
                     viewModel = vm,
                     onImport = { nav.navigate(Routes.IMPORT) },
+                    onSchedule = { nav.navigate(Routes.SCHEDULE) },
                     onResetOnboarding = {
                         nav.navigate(Routes.WELCOME) {
                             popUpTo(Routes.HOME) { inclusive = true }

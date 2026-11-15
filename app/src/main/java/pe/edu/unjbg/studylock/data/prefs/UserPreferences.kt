@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.userDataStore by preferencesDataStore(name = "studylock_prefs")
@@ -21,6 +22,7 @@ data class Prefs(
     val emergencyEnabled: Boolean = true,
     val lastEmergencyAt: Long = 0L,
     val remindersEnabled: Boolean = true,
+    val lastNotifiedAt: Long = 0L,
 ) {
     val displayName: String get() = userName.ifBlank { "Estudiante" }
 }
@@ -37,8 +39,12 @@ class UserPreferences(private val context: Context) {
             emergencyEnabled = p[Keys.EMERGENCY] ?: true,
             lastEmergencyAt = p[Keys.LAST_EMERGENCY] ?: 0L,
             remindersEnabled = p[Keys.REMINDERS] ?: true,
+            lastNotifiedAt = p[Keys.LAST_NOTIFIED] ?: 0L,
         )
     }
+
+    /** Lectura puntual del estado actual (p. ej. desde un worker en segundo plano). */
+    suspend fun current(): Prefs = flow.first()
 
     suspend fun setOnboardingDone(done: Boolean) = put { it[Keys.ONBOARDING] = done }
     suspend fun setPermissionsAcknowledged(done: Boolean) = put { it[Keys.PERMISSIONS] = done }
@@ -50,6 +56,7 @@ class UserPreferences(private val context: Context) {
     suspend fun setEmergencyEnabled(enabled: Boolean) = put { it[Keys.EMERGENCY] = enabled }
     suspend fun markEmergencyUsed(at: Long) = put { it[Keys.LAST_EMERGENCY] = at }
     suspend fun setRemindersEnabled(enabled: Boolean) = put { it[Keys.REMINDERS] = enabled }
+    suspend fun markNotified(at: Long) = put { it[Keys.LAST_NOTIFIED] = at }
 
     private suspend fun put(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.userDataStore.edit { prefs -> block(prefs) }
@@ -64,5 +71,6 @@ class UserPreferences(private val context: Context) {
         val EMERGENCY = booleanPreferencesKey("emergency_enabled")
         val LAST_EMERGENCY = longPreferencesKey("last_emergency_at")
         val REMINDERS = booleanPreferencesKey("reminders_enabled")
+        val LAST_NOTIFIED = longPreferencesKey("last_notified_at")
     }
 }

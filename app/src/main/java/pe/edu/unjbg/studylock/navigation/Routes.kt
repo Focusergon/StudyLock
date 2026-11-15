@@ -12,6 +12,7 @@ object Routes {
     const val SETTINGS = "settings"
 
     const val IMPORT = "import"
+    const val SCHEDULE = "schedule"
 
     const val COURSE_DETAIL = "course/{courseId}"
     const val START_REVIEW = "start_review/{courseId}"
