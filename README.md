@@ -10,6 +10,10 @@ se descuentan solo mientras usas esa app.
 > (Moodle), horario de clases con recordatorios inteligentes e historial de minutos y rachas.
 > El generador puede sustituirse por un modelo de IA más potente sin tocar la UI.
 
+> **¿Solo quieres instalarla en tu celular?** Sigue la guía paso a paso:
+> **[docs/INSTALACION.md](docs/INSTALACION.md)** (requisitos, instalación y solución de errores
+> como «App no instalada» o «configuración restringida» de accesibilidad en Android 13+).
+
 ---
 
 ## 1. Qué incluye esta versión
@@ -278,3 +282,127 @@ para la comunidad UNJBG. `isAccessibilityTool="false"` está declarado en la con
 ---
 
 Hecho para estudiantes de la **Universidad Nacional Jorge Basadre Grohmann (UNJBG)**.
+
+## 8. Diagramas para entender el sistema
+
+Los siguientes diagramas resumen cómo se conectan las capas y los dos flujos principales.
+GitHub y otros visores compatibles muestran los bloques `mermaid` como gráficos.
+
+### Arquitectura general
+
+```mermaid
+flowchart TB
+    subgraph Android["Android y ciclo de vida"]
+        App["StudyLockApp"]
+        Main["MainActivity"]
+        A11y["StudyLockAccessibilityService"]
+        Block["BlockingActivity"]
+        Timer["AccessTimerService"]
+    end
+
+    subgraph UI["Interfaz"]
+        Nav["StudyLockRoot / Navigation Compose"]
+        Screens["Pantallas Compose"]
+        VMs["ViewModels"]
+    end
+
+    subgraph Domain["Dominio"]
+        Models["Modelos y contratos de repositorio"]
+        Rules["Reglas: recompensas, repasos, recordatorios"]
+    end
+
+    subgraph Data["Datos"]
+        Repos["Implementaciones de repositorio"]
+        DB[("SQLite local")]
+        Prefs[("DataStore y AccessStore")]
+        Moodle["Aula Virtual / Moodle"]
+    end
+
+    App -->|"crea y comparte"| Graph["AppGraph"]
+    Main --> Nav
+    Nav --> Screens
+    Screens --> VMs
+    VMs --> Models
+    VMs --> Repos
+    Repos --> Models
+    Repos --> DB
+    Repos --> Prefs
+    Repos --> Moodle
+    Repos --> Rules
+    Graph -. "conecta dependencias" .-> Repos
+    Graph -. "conecta dependencias" .-> Prefs
+    Graph -. "conecta dependencias" .-> DB
+    A11y --> Gate["BlockingGate"]
+    Gate --> Repos
+    Gate --> Prefs
+    Gate --> Block
+    Gate --> Timer
+    Block --> VMs
+    Timer --> Repos
+    Graph -. "conecta dependencias" .-> Gate
+```
+
+### Qué pasa al abrir una app limitada
+
+```mermaid
+sequenceDiagram
+    actor Estudiante
+    participant App as App limitada
+    participant A11y as AccessibilityService
+    participant Gate as BlockingGate
+    participant Store as AccessStore
+    participant Timer as AccessTimerService
+    participant Block as BlockingActivity
+    participant VM as ChallengeViewModel
+    participant Study as StudyRepository
+    participant Minutes as MinuteRepository
+
+    Estudiante->>App: La abre
+    A11y->>Gate: Informa el paquete en primer plano
+    Gate->>Store: Guarda el paquete observado
+    Gate->>Gate: Comprueba si está limitada y consulta el saldo
+    alt No está limitada
+        Gate-->>App: No interviene
+    else Está limitada y hay saldo
+        Gate->>Store: Inicia el acceso temporal
+        Gate->>Timer: Inicia el cronómetro
+        loop Mientras la app limitada está visible
+            Timer->>Timer: Descuenta segundos
+            Timer->>Minutes: Registra minutos consumidos
+        end
+        Note over Timer,Gate: Al agotarse el acceso, vuelve a bloquear
+    else Está limitada y el saldo es cero
+        Gate->>Block: Muestra el reto
+        Estudiante->>VM: Inicia y responde el reto
+        VM->>Study: Obtiene preguntas priorizadas y guarda respuestas
+        VM->>VM: Calcula la recompensa
+        VM->>Study: Finaliza la sesión y registra los minutos ganados
+        Estudiante->>Block: Pulsa «Abrir app»
+        Block->>Gate: Confirma el reto completado
+        Gate->>Store: Inicia el acceso temporal
+        Gate->>Timer: Inicia el cronómetro
+        Block->>App: La abre
+    end
+```
+
+### De importar material a ver el progreso
+
+```mermaid
+flowchart LR
+    Sources["Texto, archivo o Aula Virtual"] --> ImportVM["ImportViewModel"]
+    ImportVM --> Extract["Extraer texto y detectar temas"]
+    Extract --> Generate["QuestionGenerator crea preguntas"]
+    Generate --> ContentRepo["ContentRepositoryImpl"]
+    ContentRepo --> DB[("SQLite: cursos, temas, preguntas y opciones")]
+
+    DB --> StudyRepo["StudyRepositoryImpl"]
+    StudyRepo --> Priorities["ReviewScheduler prioriza temas"]
+    Priorities --> Questions["Sesión de repaso o reto"]
+    Questions --> Student["Estudiante responde"]
+    Student --> StudyRepo
+    StudyRepo --> History["Guarda respuestas y actualiza dominio"]
+    StudyRepo --> Ledger[("Ledger de minutos")]
+    History --> Stats["StatsRepository"]
+    Ledger --> Stats
+    Stats --> Dashboard["Inicio e historial de progreso"]
+```
