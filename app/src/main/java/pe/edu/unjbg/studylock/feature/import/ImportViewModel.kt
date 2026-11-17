@@ -13,9 +13,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import pe.edu.unjbg.studylock.core.text.PdfTextExtractor
-import pe.edu.unjbg.studylock.data.aula.AulaCourse
-import pe.edu.unjbg.studylock.data.aula.AulaSite
-import pe.edu.unjbg.studylock.data.aula.AulaVirtualClient
 import pe.edu.unjbg.studylock.domain.content.GeneratedTopic
 import pe.edu.unjbg.studylock.domain.content.QuestionGenerator
 import pe.edu.unjbg.studylock.domain.model.ImportResult
@@ -26,9 +23,9 @@ import pe.edu.unjbg.studylock.domain.repo.ContentRepository
 /**
  * Estado de la pantalla de importación.
  *
- * Cubre las tres vías de entrada de contenido: pegar texto, elegir un archivo (.txt/.md/.pdf) y
- * conectar el Aula Virtual (Moodle). El resultado siempre es una lista de [GeneratedTopic] lista
- * para previsualizar y guardar como curso.
+ * Cubre dos vías manuales de entrada de contenido: pegar texto y elegir un archivo (.txt/.md/.pdf).
+ * La vía automática (Aula Virtual e Intranet) vive en la pantalla «Cuentas UNJBG». El resultado
+ * siempre es una lista de [GeneratedTopic] lista para previsualizar y guardar como curso.
  */
 data class ImportUi(
     val courseName: String = "",
@@ -42,28 +39,16 @@ data class ImportUi(
     val kind: ImportSourceKind = ImportSourceKind.TEXT,
     val result: ImportResult? = null,
     val sources: List<ImportSource> = emptyList(),
-    // Aula Virtual
-    val aulaUrl: String = DEFAULT_AULA_URL,
-    val aulaToken: String = "",
-    val connecting: Boolean = false,
-    val site: AulaSite? = null,
-    val courses: List<AulaCourse> = emptyList(),
-    val importingCourseId: Int? = null,
 ) {
     val questionCount: Int get() = topics.sumOf { it.questions.size }
     val canSave: Boolean get() = topics.isNotEmpty() && courseName.isNotBlank() && !saving
-    val connected: Boolean get() = site != null
-
-    companion object {
-        const val DEFAULT_AULA_URL = "https://aulavirtual.unjbg.edu.pe"
-    }
 }
 
 /**
- * Orquesta la importación de material académico.
+ * Orquesta la importación manual de material académico.
  *
  * Todo el trabajo pesado (extracción de PDF y generación de preguntas) corre fuera del hilo
- * principal; el Aula Virtual se consulta en [Dispatchers.IO].
+ * principal.
  */
 class ImportViewModel(
     private val context: Context,
@@ -82,8 +67,6 @@ class ImportViewModel(
     fun setCourseName(value: String) = _ui.update { it.copy(courseName = value, error = null) }
     fun setProfessor(value: String) = _ui.update { it.copy(professor = value) }
     fun setText(value: String) = _ui.update { it.copy(text = value) }
-    fun setAulaUrl(value: String) = _ui.update { it.copy(aulaUrl = value) }
-    fun setAulaToken(value: String) = _ui.update { it.copy(aulaToken = value) }
     fun dismissError() = _ui.update { it.copy(error = null) }
     fun dismissResult() = _ui.update { it.copy(result = null) }
 
@@ -172,114 +155,8 @@ class ImportViewModel(
         }
     }
 
-    // --- Aula Virtual -------------------------------------------------------
-
-    fun connectAula() {
-        val state = _ui.value
-        if (state.aulaToken.isBlank()) {
-            _ui.update { it.copy(error = "Pega la clave (token) del Aula Virtual.") }
-            return
-        }
-        _ui.update { it.copy(connecting = true, error = null) }
-        viewModelScope.launch {
-            val outcome = withContext(Dispatchers.IO) {
-                runCatching {
-                    val client = AulaVirtualClient(state.aulaUrl, state.aulaToken.trim())
-                    val site = client.validate()
-                    site to client.courses()
-                }
-            }
-            outcome.fold(
-                onSuccess = { (site, courses) ->
-                    _ui.update { it.copy(connecting = false, site = site, courses = courses, error = null) }
-                },
-                onFailure = { error ->
-                    _ui.update {
-                        it.copy(
-                            connecting = false,
-                            error = error.message ?: "No se pudo conectar con el Aula Virtual.",
-                        )
-                    }
-                },
-            )
-        }
-    }
-
-    fun disconnectAula() = _ui.update { it.copy(site = null, courses = emptyList(), aulaToken = "") }
-
-    /** Descarga los documentos de un curso del Aula Virtual y genera sus preguntas. */
-    fun importAulaCourse(course: AulaCourse) {
-        val state = _ui.value
-        _ui.update { it.copy(importingCourseId = course.id, error = null, result = null) }
-        viewModelScope.launch {
-            val outcome = withContext(Dispatchers.IO) {
-                runCatching { buildAulaTopics(state.aulaUrl, state.aulaToken.trim(), course) }
-            }
-            outcome.fold(
-                onSuccess = { topics ->
-                    if (topics.isEmpty()) {
-                        _ui.update {
-                            it.copy(
-                                importingCourseId = null,
-                                error = "El curso «${course.fullName}» no tiene documentos de texto o PDF para procesar.",
-                            )
-                        }
-                    } else {
-                        val result = content.importCourse(
-                            courseName = course.fullName,
-                            professor = state.site?.siteName.orEmpty(),
-                            topics = topics,
-                            kind = ImportSourceKind.MOODLE,
-                            sourceTitle = "Aula Virtual · ${course.shortName.ifBlank { course.fullName }}",
-                        )
-                        _ui.update { it.copy(importingCourseId = null, result = result) }
-                    }
-                },
-                onFailure = { error ->
-                    _ui.update {
-                        it.copy(importingCourseId = null, error = error.message ?: "No se pudo importar el curso.")
-                    }
-                },
-            )
-        }
-    }
-
     fun deleteSource(id: String) {
         viewModelScope.launch { content.deleteSource(id) }
-    }
-
-    private fun buildAulaTopics(url: String, token: String, course: AulaCourse): List<GeneratedTopic> {
-        val client = AulaVirtualClient(url, token)
-        val sections = client.sections(course.id)
-        val topics = ArrayList<GeneratedTopic>()
-        for (section in sections) {
-            val body = StringBuilder()
-            for (file in section.files) {
-                val text = downloadText(client, file.url) ?: continue
-                if (text.isNotBlank()) body.append(text).append("\n\n")
-            }
-            if (body.isBlank()) continue
-            val generated = QuestionGenerator.generate(body.toString(), section.name, maxQuestions = 8)
-            if (generated.size >= 2) topics += GeneratedTopic(section.name, generated)
-        }
-        if (topics.isEmpty()) {
-            // Sin secciones útiles: se trata todo el curso como un único tema.
-            val whole = sections.flatMap { it.files }
-                .joinToString("\n\n") { downloadText(client, it.url).orEmpty() }
-            val generated = QuestionGenerator.generate(whole, course.fullName, maxQuestions = 12)
-            if (generated.size >= 2) topics += GeneratedTopic(course.fullName, generated)
-        }
-        return topics
-    }
-
-    private fun downloadText(client: AulaVirtualClient, url: String): String? {
-        val bytes = runCatching { client.download(url) }.getOrNull() ?: return null
-        if (bytes.isEmpty()) return null
-        return if (PdfTextExtractor.looksLikePdf(bytes)) {
-            PdfTextExtractor.extract(bytes)
-        } else {
-            String(bytes, Charsets.UTF_8)
-        }
     }
 
     private fun readFile(uri: Uri): Pair<String, String>? {

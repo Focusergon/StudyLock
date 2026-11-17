@@ -20,6 +20,8 @@ import pe.edu.unjbg.studylock.core.designsystem.SlBottomBar
 import pe.edu.unjbg.studylock.core.designsystem.SlColors
 import pe.edu.unjbg.studylock.di.AppGraph
 import pe.edu.unjbg.studylock.feature.access.AccessActiveScreen
+import pe.edu.unjbg.studylock.feature.accounts.AccountsScreen
+import pe.edu.unjbg.studylock.feature.accounts.AccountsViewModel
 import pe.edu.unjbg.studylock.feature.courses.CourseDetailScreen
 import pe.edu.unjbg.studylock.feature.courses.CourseDetailViewModel
 import pe.edu.unjbg.studylock.feature.courses.CoursesScreen
@@ -98,6 +100,7 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                 ConnectAccountScreen(
                     viewModel = vm,
                     onBack = { nav.popBackStack() },
+                    onOpenAccounts = { nav.navigate(Routes.ACCOUNTS) },
                     onContinue = { nav.navigate(Routes.PERMISSIONS) },
                 )
             }
@@ -157,7 +160,18 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                 val vm: ImportViewModel = viewModel(
                     factory = viewModelFactory { ImportViewModel(context, graph.content) },
                 )
-                ImportScreen(viewModel = vm, onBack = { nav.popBackStack() })
+                ImportScreen(
+                    viewModel = vm,
+                    onBack = { nav.popBackStack() },
+                    onAccounts = { nav.navigate(Routes.ACCOUNTS) },
+                )
+            }
+
+            composable(Routes.ACCOUNTS) {
+                val vm: AccountsViewModel = viewModel(
+                    factory = viewModelFactory { AccountsViewModel(graph.credentials, graph.content) },
+                )
+                AccountsScreen(viewModel = vm, onBack = { nav.popBackStack() })
             }
 
             composable(Routes.SCHEDULE) {
@@ -214,6 +228,7 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                 SettingsScreen(
                     viewModel = vm,
                     onImport = { nav.navigate(Routes.IMPORT) },
+                    onAccounts = { nav.navigate(Routes.ACCOUNTS) },
                     onSchedule = { nav.navigate(Routes.SCHEDULE) },
                     onBlockedApps = { nav.navigate(Routes.BLOCKED_APPS) },
                     onResetOnboarding = {

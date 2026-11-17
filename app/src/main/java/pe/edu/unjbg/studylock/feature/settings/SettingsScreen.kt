@@ -51,7 +51,7 @@ import pe.edu.unjbg.studylock.core.util.PermissionUtils
 import pe.edu.unjbg.studylock.ui.rememberPermissionStatus
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onSchedule: () -> Unit, onBlockedApps: () -> Unit, onResetOnboarding: () -> Unit) {
+fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onAccounts: () -> Unit, onSchedule: () -> Unit, onBlockedApps: () -> Unit, onResetOnboarding: () -> Unit) {
     val context = LocalContext.current
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val permissions = rememberPermissionStatus()
@@ -267,6 +267,29 @@ fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onSchedul
             }
 
             item {
+                SlCard(onClick = onAccounts) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SlIconBadge(
+                            icon = Icons.Filled.School,
+                            tint = SlColors.Primary,
+                            background = SlColors.ChipBlue,
+                            size = 38.dp,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Cuentas UNJBG", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+                            Text(
+                                "Aula Virtual e Intranet: inicia sesión y arma tu árbol de cursos",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlColors.Muted,
+                            )
+                        }
+                        SlPill("Nuevo", SlColors.Teal, SlColors.Mint)
+                    }
+                }
+            }
+
+            item {
                 SlCard(onClick = onImport) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         SlIconBadge(
@@ -279,12 +302,12 @@ fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onSchedul
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Importar contenido", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
                             Text(
-                                "Aula Virtual UNJBG, texto pegado o archivo .pdf",
+                                "Texto pegado o archivo .pdf",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = SlColors.Muted,
                             )
                         }
-                        SlPill("Nuevo", SlColors.Teal, SlColors.Mint)
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = SlColors.Muted)
                     }
                 }
             }

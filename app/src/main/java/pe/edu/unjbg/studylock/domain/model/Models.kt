@@ -176,7 +176,7 @@ data class History(
 )
 
 /** Origen del contenido importado. */
-enum class ImportSourceKind { TEXT, FILE, MOODLE }
+enum class ImportSourceKind { TEXT, FILE, AULA, INTRANET }
 
 /** Registro de una importación de contenido (texto pegado, archivo o Aula Virtual). */
 data class ImportSource(

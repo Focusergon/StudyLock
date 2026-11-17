@@ -172,13 +172,19 @@ class ContentRepositoryImpl(
         db.readableDatabase.list("SELECT * FROM import_sources ORDER BY created_at DESC") { c ->
             ImportSource(
                 id = c.str("id"),
-                kind = runCatching { ImportSourceKind.valueOf(c.str("kind")) }.getOrDefault(ImportSourceKind.TEXT),
+                kind = parseKind(c.str("kind")),
                 title = c.str("title"),
                 courseId = c.str("course_id"),
                 questionCount = c.i("question_count"),
                 createdAt = c.l("created_at"),
             )
         }
+
+    /** El valor `MOODLE` se usó en versiones anteriores; ahora el Aula Virtual es `AULA`. */
+    private fun parseKind(raw: String): ImportSourceKind = when (raw) {
+        "MOODLE" -> ImportSourceKind.AULA
+        else -> runCatching { ImportSourceKind.valueOf(raw) }.getOrDefault(ImportSourceKind.TEXT)
+    }
 
     private fun stableCourseId(name: String): String {
         val slug = name.lowercase()

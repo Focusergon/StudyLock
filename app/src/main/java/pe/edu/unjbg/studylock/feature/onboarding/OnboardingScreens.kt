@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
@@ -166,7 +167,12 @@ private fun BenefitRow(icon: ImageVector, text: String) {
 }
 
 @Composable
-fun ConnectAccountScreen(viewModel: OnboardingViewModel, onBack: () -> Unit, onContinue: () -> Unit) {
+fun ConnectAccountScreen(
+    viewModel: OnboardingViewModel,
+    onBack: () -> Unit,
+    onOpenAccounts: () -> Unit,
+    onContinue: () -> Unit,
+) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
 
     SlScreen {
@@ -185,12 +191,40 @@ fun ConnectAccountScreen(viewModel: OnboardingViewModel, onBack: () -> Unit, onC
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Importaremos tus cursos matriculados y el material del Aula Virtual. " +
-                    "No tendrás que crear tarjetas a mano.",
+                text = "StudyLock inicia sesión en el Aula Virtual y la Intranet con tu usuario y contraseña, " +
+                    "y arma el árbol de cursos y archivos para generar las preguntas. No tendrás que crear tarjetas a mano.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = SlColors.Muted,
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
+
+            SlCard(onClick = onOpenAccounts) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SlIconBadge(Icons.Filled.School, SlColors.Primary, SlColors.ChipBlue, size = 38.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Vincular cuentas UNJBG", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+                        Text(
+                            text = "Aula Virtual e Intranet · guarda tus credenciales cifradas",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SlColors.Muted,
+                        )
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = SlColors.Muted,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = "Tu perfil en la app",
+                style = MaterialTheme.typography.labelMedium,
+                color = SlColors.Muted,
+            )
+            Spacer(Modifier.height(8.dp))
 
             SlTextField(
                 label = "Nombre",
@@ -225,8 +259,8 @@ fun ConnectAccountScreen(viewModel: OnboardingViewModel, onBack: () -> Unit, onC
                 Icon(Icons.Filled.Lock, contentDescription = null, tint = SlColors.Primary, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    text = "Tus credenciales se guardan solo en este dispositivo. " +
-                        "En esta versión la conexión es local y no envía tu contraseña a ningún servidor.",
+                    text = "Tus credenciales se cifran con el almacén seguro de Android y solo se usan para " +
+                        "iniciar sesión en las páginas oficiales de la UNJBG. Nunca se envían a otros servidores.",
                     style = MaterialTheme.typography.bodySmall,
                     color = SlColors.Primary,
                 )
@@ -235,7 +269,7 @@ fun ConnectAccountScreen(viewModel: OnboardingViewModel, onBack: () -> Unit, onC
             Spacer(Modifier.height(24.dp))
             if (!ui.connected) {
                 SlPrimaryButton(
-                    text = if (ui.connecting) "Conectando…" else "Conectar con UNJBG",
+                    text = if (ui.connecting) "Guardando…" else "Guardar mi perfil",
                     onClick = viewModel::connect,
                     enabled = ui.canConnect && !ui.connecting,
                     icon = null,
@@ -252,9 +286,9 @@ fun ConnectAccountScreen(viewModel: OnboardingViewModel, onBack: () -> Unit, onC
                     Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = SlColors.Teal)
                     Spacer(Modifier.width(10.dp))
                     Column {
-                        Text("Cuenta vinculada", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+                        Text("Perfil guardado", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
                         Text(
-                            "3 cursos y 12 temas listos para repasar.",
+                            "Puedes vincular tus cuentas UNJBG ahora o más tarde desde Ajustes.",
                             style = MaterialTheme.typography.bodySmall,
                             color = SlColors.Muted,
                         )

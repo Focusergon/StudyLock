@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Link
@@ -57,7 +56,6 @@ import pe.edu.unjbg.studylock.core.designsystem.SlTextButton
 import pe.edu.unjbg.studylock.core.designsystem.SlTextField
 import pe.edu.unjbg.studylock.core.designsystem.SlTopBar
 import pe.edu.unjbg.studylock.core.util.TimeUtils
-import pe.edu.unjbg.studylock.data.aula.AulaCourse
 import pe.edu.unjbg.studylock.domain.model.ImportSourceKind
 
 /**
@@ -68,7 +66,7 @@ import pe.edu.unjbg.studylock.domain.model.ImportSourceKind
  * Aula Virtual y traer un curso completo; la app genera las preguntas automáticamente.
  */
 @Composable
-fun ImportScreen(viewModel: ImportViewModel, onBack: () -> Unit) {
+fun ImportScreen(viewModel: ImportViewModel, onBack: () -> Unit, onAccounts: () -> Unit) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.importFile(uri)
@@ -111,28 +109,19 @@ fun ImportScreen(viewModel: ImportViewModel, onBack: () -> Unit) {
             }
 
             item {
-                AulaConnectCard(ui = ui, viewModel = viewModel)
-            }
-
-            if (ui.connected) {
-                if (ui.courses.isEmpty()) {
-                    item {
-                        SlCard(color = SlColors.Background, border = false) {
+                SlCard(onClick = onAccounts) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SlIconBadge(Icons.Filled.School, SlColors.Primary, SlColors.ChipBlue, size = 38.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Cuentas UNJBG", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
                             Text(
-                                text = "Tu cuenta no tiene cursos con matrícula activa.",
+                                text = "Inicia sesión en el Aula Virtual e Intranet y arma tu árbol de cursos.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = SlColors.Muted,
                             )
                         }
-                    }
-                } else {
-                    items(ui.courses, key = { it.id }) { course ->
-                        AulaCourseRow(
-                            course = course,
-                            importing = ui.importingCourseId == course.id,
-                            enabled = ui.importingCourseId == null,
-                            onImport = { viewModel.importAulaCourse(course) },
-                        )
+                        Icon(Icons.Filled.Link, contentDescription = null, tint = SlColors.Muted)
                     }
                 }
             }
@@ -283,101 +272,6 @@ fun ImportScreen(viewModel: ImportViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun AulaConnectCard(ui: ImportUi, viewModel: ImportViewModel) {
-    SlCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SlIconBadge(Icons.Filled.Cloud, SlColors.Primary, SlColors.ChipBlue, size = 38.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (ui.connected) "Aula Virtual conectada" else "Conectar Aula Virtual",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = SlColors.Ink,
-                )
-                Text(
-                    text = ui.site?.let { "${it.userName} · ${it.siteName}" }
-                        ?: "Moodle UNJBG · importa tus cursos automáticamente",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = SlColors.Muted,
-                )
-            }
-            if (ui.connected) {
-                SlPill("Activa", SlColors.Teal, SlColors.Mint)
-            }
-        }
-
-        if (!ui.connected) {
-            Spacer(Modifier.height(12.dp))
-            SlTextField(
-                label = "Dirección del Aula Virtual",
-                value = ui.aulaUrl,
-                onValueChange = viewModel::setAulaUrl,
-                placeholder = ImportUi.DEFAULT_AULA_URL,
-            )
-            Spacer(Modifier.height(12.dp))
-            SlTextField(
-                label = "Clave (token) de servicio web",
-                value = ui.aulaToken,
-                onValueChange = viewModel::setAulaToken,
-                placeholder = "Genera tu token en Moodle → Seguridad → Claves",
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "Tu contraseña institucional nunca se guarda: solo se usa el token que generas en tu perfil de Moodle.",
-                style = MaterialTheme.typography.bodySmall,
-                color = SlColors.Muted,
-            )
-            Spacer(Modifier.height(12.dp))
-            SlPrimaryButton(
-                text = if (ui.connecting) "Conectando…" else "Conectar",
-                onClick = viewModel::connectAula,
-                enabled = !ui.connecting,
-                icon = Icons.Filled.Link,
-            )
-        } else {
-            Spacer(Modifier.height(6.dp))
-            SlTextButton(text = "Desconectar", onClick = viewModel::disconnectAula, color = SlColors.Danger)
-        }
-    }
-}
-
-@Composable
-private fun AulaCourseRow(
-    course: AulaCourse,
-    importing: Boolean,
-    enabled: Boolean,
-    onImport: () -> Unit,
-) {
-    SlCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(SlColors.ChipBlue),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.School, contentDescription = null, tint = SlColors.Primary, modifier = Modifier.size(18.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(course.fullName, style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
-                Text(course.shortName, style = MaterialTheme.typography.bodySmall, color = SlColors.Muted)
-            }
-            Spacer(Modifier.width(8.dp))
-            if (importing) {
-                CircularProgressIndicator(color = SlColors.Primary, modifier = Modifier.size(20.dp))
-            } else {
-                SlTextButton(text = "Importar", onClick = onImport, color = SlColors.Primary)
-            }
-        }
-        if (!enabled && !importing) {
-            Spacer(Modifier.height(2.dp))
-        }
-    }
-}
-
-@Composable
 private fun SourceRow(title: String, subtitle: String, onDelete: () -> Unit) {
     Row(
         modifier = Modifier
@@ -464,7 +358,8 @@ private fun SlTextArea(
 private fun kindLabel(kind: ImportSourceKind): String = when (kind) {
     ImportSourceKind.TEXT -> "Texto pegado"
     ImportSourceKind.FILE -> "Archivo"
-    ImportSourceKind.MOODLE -> "Aula Virtual"
+    ImportSourceKind.AULA -> "Aula Virtual"
+    ImportSourceKind.INTRANET -> "Intranet"
 }
 
 private val FILE_TYPES = arrayOf(

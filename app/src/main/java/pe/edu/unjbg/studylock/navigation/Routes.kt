@@ -14,6 +14,7 @@ object Routes {
     const val IMPORT = "import"
     const val SCHEDULE = "schedule"
     const val BLOCKED_APPS = "blocked_apps"
+    const val ACCOUNTS = "accounts"
 
     const val COURSE_DETAIL = "course/{courseId}"
     const val START_REVIEW = "start_review/{courseId}"

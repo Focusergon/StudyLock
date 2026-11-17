@@ -3,6 +3,7 @@ package pe.edu.unjbg.studylock.di
 import android.content.Context
 import pe.edu.unjbg.studylock.blocking.BlockingGate
 import pe.edu.unjbg.studylock.blocking.StudyLockNotifications
+import pe.edu.unjbg.studylock.data.auth.CredentialStore
 import pe.edu.unjbg.studylock.data.local.StudyLockDatabase
 import pe.edu.unjbg.studylock.data.prefs.AccessStore
 import pe.edu.unjbg.studylock.data.prefs.UserPreferences
@@ -27,6 +28,7 @@ class AppGraph(context: Context) {
     val db: StudyLockDatabase by lazy { StudyLockDatabase(appContext) }
     val prefs: UserPreferences by lazy { UserPreferences(appContext) }
     val accessStore: AccessStore by lazy { AccessStore(appContext) }
+    val credentials: CredentialStore by lazy { CredentialStore(appContext) }
 
     val courses by lazy { CourseRepositoryImpl(db) }
     val study by lazy { StudyRepositoryImpl(db) }

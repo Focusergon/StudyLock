@@ -6,8 +6,9 @@ muestra un **reto rápido de 2 preguntas**. Resolverlo otorga minutos de acceso 
 se descuentan solo mientras usas esa app.
 
 > Estado: **versión inicial completa y escalable**. Incluye el bucle de bloqueo, generación de
-> preguntas on-device a partir de tu propio material, importación desde el Aula Virtual UNJBG
-> (Moodle), horario de clases con recordatorios inteligentes e historial de minutos y rachas.
+> preguntas on-device a partir de tu propio material, vinculación de **Cuentas UNJBG** (Aula
+> Virtual e Intranet) con un mini-navegador que inicia sesión y arma el árbol de cursos y archivos,
+> horario de clases con recordatorios inteligentes e historial de minutos y rachas.
 > El generador puede sustituirse por un modelo de IA más potente sin tocar la UI.
 
 > **¿Solo quieres instalarla en tu celular?** Sigue la guía paso a paso:
@@ -47,8 +48,11 @@ se descuentan solo mientras usas esa app.
   débiles (`Topic.priority`).
 
 ### Importación de contenido (sin crear tarjetas a mano)
-- **Aula Virtual UNJBG (Moodle)**: conector de servicios web (`AulaVirtualClient`) que valida el
-  token móvil, lista tus cursos y descarga los documentos de cada sección.
+- **Cuentas UNJBG** (`feature/accounts/`): guarda tu usuario y contraseña del **Aula Virtual** y de
+  la **Intranet** (contraseña cifrada con el Android Keystore; casilla «misma contraseña» para
+  reutilizar la del Aula). Un **mini-navegador visible** inicia sesión como lo haría una persona y
+  **recorre** las páginas para descubrir cursos → secciones → archivos, sin depender de endpoints
+  concretos. De ahí sale un **árbol** con selección por archivo y la generación de preguntas.
 - **Texto pegado** o **archivo `.txt`/`.md`/`.pdf`** (extractor de PDF propio, sin dependencias).
 - `QuestionGenerator` detecta temas (encabezados) y crea preguntas de completar y de definición
   con distractores sacados del propio material. Es determinista y se ejecuta en el dispositivo.
@@ -151,7 +155,8 @@ app/src/main/java/pe/edu/unjbg/studylock/
 │   ├── text/                    # Extractor de texto de PDF (Kotlin puro)
 │   └── util/                    # Tiempo, permisos, carga de apps instaladas
 ├── data/
-│   ├── aula/                    # Conector del Aula Virtual UNJBG (Moodle Web Services)
+│   ├── auth/                    # Credenciales UNJBG cifradas (Android Keystore + DataStore)
+│   ├── web/                     # Mini-navegador (WebView), extractores y descarga de archivos
 │   ├── local/                   # SQLiteOpenHelper, esquema, helpers de Cursor
 │   ├── prefs/                   # DataStore (perfil/metas) y AccessStore (tiempo real)
 │   ├── repos/                   # Implementaciones de repositorios
@@ -174,7 +179,8 @@ app/src/main/java/pe/edu/unjbg/studylock/
 │   └── StudyLockNotifications.kt
 ├── feature/
 │   ├── onboarding/ home/ courses/ session/ progress/ settings/
-│   ├── import/                  # Importación (Aula Virtual, texto, archivo)
+│   ├── accounts/                # Cuentas UNJBG: credenciales, árbol de contenido y generación
+│   ├── import/                  # Importación manual (texto pegado, archivo .txt/.md/.pdf)
 │   ├── schedule/                # Horario de clases y franjas libres
 │   ├── access/                  # Pantalla de acceso temporal activo
 │   └── blocking/                # UI y ViewModel del reto
@@ -189,8 +195,9 @@ app/src/main/java/pe/edu/unjbg/studylock/
 4. La capa de bloqueo usa `suspend` + `Dispatchers.IO` y no depende de Compose.
 
 ### Puntos de extensión
-- **Conector UNJBG**: `AulaVirtualClient` (Moodle Web Services) ya importa cursos y documentos.
-  Para SSO institucional, sustituye el token por OAuth manteniendo `ContentRepository`.
+- **Conector UNJBG**: `AulaExtractor` / `IntranetExtractor` (sobre `UnjbgWebSession`, un `WebView`
+  real) ya descubren cursos, sílabos y documentos recorriendo la web. El login lo hacen con las
+  credenciales cifradas de `CredentialStore`; no hay endpoints fijos que mantener.
 - **Generador de preguntas**: `QuestionGenerator` (on-device) llena `questions` y `options`.
   Reemplazarlo por un LLM es cambiar la implementación de `ContentRepository`, sin tocar la UI.
 - **Backend**: sincronización opcional de progreso; el ledger local sigue siendo la verdad en
@@ -228,16 +235,16 @@ desde **Ajustes → Permisos del sistema**.
 ## 5. Privacidad y seguridad
 
 - Todo el progreso, cursos y minutos viven en SQLite local; no hay backend propio.
-- El correo institucional se guarda en DataStore. **No se almacena contraseña**: el onboarding es
-  una vinculación local y el Aula Virtual usa el **token de servicio web** que generas tú en tu
-  perfil de Moodle (Preferencias → Seguridad → Claves), no tu contraseña.
-- La app pide `INTERNET` solo para hablar con el Aula Virtual que tú indiques; el material se
+- El correo institucional se guarda en DataStore. Las credenciales del Aula Virtual e Intranet se
+  guardan **cifradas** con AES-256-GCM y una clave del **Android Keystore** (que nunca sale del
+  dispositivo); la contraseña de la Intranet puede reutilizar la del Aula («misma contraseña»).
+- La app pide `INTERNET` para abrir las páginas oficiales de la UNJBG en el mini-navegador y para
+  descargar el material elegido. Las credenciales solo se escriben en esas páginas; el contenido se
   procesa en el dispositivo y no se envía a ningún servidor.
 - El servicio de accesibilidad solo recibe el nombre del paquete en primer plano; no inspecciona
   nodos ni contenido de otras apps.
 - `allowBackup=false` y reglas de extracción excluyen bases de datos y preferencias.
-- Al integrar SSO institucional: usar OAuth/SSO y cifrado en reposo, nunca credenciales en texto
-  plano en el dispositivo.
+- «Cerrar sesión» borra las cookies de la UNJBG y las credenciales guardadas del dispositivo.
 
 ### Nota sobre Google Play
 El uso de `AccessibilityService` para bloquear apps requiere justificación explícita en Play
@@ -252,8 +259,9 @@ para la comunidad UNJBG. `isAccessibilityTool="false"` está declarado en la con
 - La extracción de PDF es **best-effort**: funciona con PDFs de texto (Word/LaTeX), no con
   escaneados ni fuentes CID (requerirían OCR).
 - El generador de preguntas es determinista y local; la calidad mejora al sustituirlo por un LLM.
-- El Aula Virtual requiere que el administrador de Moodle tenga habilitado el servicio web móvil
-  y que tú generes un token; no se usa SSO todavía.
+- El descubrimiento de contenido es **heurístico** (recorre enlaces del mismo sitio que parecen
+  secciones): si el campus cambia de estructura pueden aparecer menos archivos; hay respaldo de
+  inicio de sesión manual en la propia ventana si la web pide intervención.
 - No hay autenticación remota ni sincronización multidispositivo.
 - La detección depende del servicio de accesibilidad; si el usuario lo desactiva, el bloqueo
   se degrada (el temporizador usa `UsageStatsManager` como respaldo, pero no hay intercepción
@@ -262,15 +270,16 @@ para la comunidad UNJBG. `isAccessibilityTool="false"` está declarado en la con
   del APK conviene revisar en Ajustes que siga activo.
 - La lista de apps conocidas para preselección es estática; se puede ampliar en
   `InstalledAppsLoader.knownCategories`.
-- Hay 46 tests JVM de la lógica pura (`RewardPolicy`, `ReviewScheduler`, `TimeUtils`,
-  `QuestionGenerator`, `PdfTextExtractor`, `SmartReminder`, `HistoryStats`, franjas libres), pero
-  todavía no hay tests instrumentados de UI ni pruebas en dispositivos reales.
+- Hay 62 tests JVM de la lógica pura (`RewardPolicy`, `ReviewScheduler`, `TimeUtils`,
+  `QuestionGenerator`, `PdfTextExtractor`, `SmartReminder`, `HistoryStats`, franjas libres,
+  clasificador de enlaces y scripts del mini-navegador), pero todavía no hay tests instrumentados de
+  UI ni pruebas en dispositivos reales.
 
 ---
 
 ## 7. Roadmap sugerido
 
-1. **SSO institucional** para el Aula Virtual (hoy se usa el token de servicio web móvil).
+1. **SSO institucional** para el Aula Virtual e Intranet (hoy se guarda la contraseña cifrada).
 2. **Generador con IA** (backend o modelo on-device) para preguntas de mayor calidad, con
    validación docente.
 3. **Importar horario** desde el Aula Virtual o un archivo `.ics` (hoy se registra a mano).
@@ -315,7 +324,8 @@ flowchart TB
         Repos["Implementaciones de repositorio"]
         DB[("SQLite local")]
         Prefs[("DataStore y AccessStore")]
-        Moodle["Aula Virtual / Moodle"]
+        Web["Aula Virtual e Intranet (mini-navegador)"]
+        Secure[("Credenciales cifradas (Keystore)")]
     end
 
     App -->|"crea y comparte"| Graph["AppGraph"]
@@ -327,11 +337,13 @@ flowchart TB
     Repos --> Models
     Repos --> DB
     Repos --> Prefs
-    Repos --> Moodle
+    Repos --> Web
+    Repos --> Secure
     Repos --> Rules
     Graph -. "conecta dependencias" .-> Repos
     Graph -. "conecta dependencias" .-> Prefs
     Graph -. "conecta dependencias" .-> DB
+    Graph -. "conecta dependencias" .-> Secure
     A11y --> Gate["BlockingGate"]
     Gate --> Repos
     Gate --> Prefs
@@ -389,8 +401,8 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    Sources["Texto, archivo o Aula Virtual"] --> ImportVM["ImportViewModel"]
-    ImportVM --> Extract["Extraer texto y detectar temas"]
+    Sources["Cuentas UNJBG (Aula/Intranet) · texto · archivo"] --> AccountsVM["AccountsViewModel / ImportViewModel"]
+    AccountsVM --> Extract["Mini-navegador inicia sesión y extrae texto"]
     Extract --> Generate["QuestionGenerator crea preguntas"]
     Generate --> ContentRepo["ContentRepositoryImpl"]
     ContentRepo --> DB[("SQLite: cursos, temas, preguntas y opciones")]

@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -179,6 +181,7 @@ fun SlTextField(
     placeholder: String = "",
     keyboardType: KeyboardType = KeyboardType.Text,
     enabled: Boolean = true,
+    isPassword: Boolean = false,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -198,7 +201,8 @@ fun SlTextField(
             enabled = enabled,
             shape = RoundedCornerShape(14.dp),
             textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            keyboardOptions = KeyboardOptions(keyboardType = if (isPassword) KeyboardType.Password else keyboardType),
+            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = SlColors.Surface,
                 unfocusedContainerColor = SlColors.Surface,
