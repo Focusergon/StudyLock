@@ -19,7 +19,12 @@ class AulaExtractor(
     private val baseUrl: String,
 ) {
 
-    suspend fun sync(credentials: UnjbgCredentials, status: (String) -> Unit): ExtractionResult {
+    suspend fun sync(
+        credentials: UnjbgCredentials,
+        status: (String) -> Unit,
+        awaitManual: suspend () -> Unit = {},
+        onPartial: (List<ContentCourse>, Int, Int) -> Unit = { _, _, _ -> Unit },
+    ): ExtractionResult {
         status("Abriendo el Aula Virtual…")
         session.open(baseUrl)
 
@@ -28,7 +33,8 @@ class AulaExtractor(
             password = credentials.aulaPassword,
             status = status,
             loginMessage = "Iniciando sesión en el Aula Virtual…",
-            waitingMessage = "Completa el inicio de sesión en la ventana…",
+            waitingMessage = "Completa el inicio de sesión en la ventana y pulsa «Ya terminé».",
+            awaitManual = awaitManual,
         )
         if (!loggedIn) {
             return ExtractionResult(notice = "No se pudo iniciar sesión en el Aula Virtual. Revisa tus credenciales.")
@@ -61,12 +67,13 @@ class AulaExtractor(
                 source = ContentSource.AULA,
                 sections = sections,
             )
+            onPartial(tree.toList(), index + 1, courses.size)
         }
         return ExtractionResult(courses = tree)
     }
 
     private companion object {
-        const val MAX_COURSES = 30
-        const val MAX_PAGES_PER_COURSE = 8
+        const val MAX_COURSES = 15
+        const val MAX_PAGES_PER_COURSE = 4
     }
 }

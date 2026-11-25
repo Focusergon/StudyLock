@@ -11,10 +11,10 @@ import pe.edu.unjbg.studylock.domain.model.ContentSection
  */
 
 /** Tiempo máximo para el login automático antes de pasar a pedir ayuda al usuario. */
-private const val LOGIN_TIMEOUT = 25_000L
+private const val LOGIN_TIMEOUT = 12_000L
 
-/** Tiempo que esperamos a que el usuario termine el login a mano (captcha, aviso, etc.). */
-private const val MANUAL_TIMEOUT = 120_000L
+/** Margen corto tras confirmar el login manual antes de volver a comprobar el formulario. */
+private const val AFTER_MANUAL_TIMEOUT = 12_000L
 
 /**
  * Inicia sesión si la página lo pide. Devuelve `false` si, tras esperar, sigue habiendo un
@@ -26,18 +26,21 @@ internal suspend fun UnjbgWebSession.loginWith(
     status: (String) -> Unit,
     loginMessage: String,
     waitingMessage: String,
+    /** La UI confirma «Ya terminé el ingreso»; por defecto se espera un margen corto. */
+    awaitManual: suspend () -> Unit = {},
 ): Boolean {
     if (!hasPasswordField()) return true
     status(loginMessage)
     submitLogin(user, password)
     if (waitUntil(WebScripts.noPasswordField(), LOGIN_TIMEOUT)) return true
     status(waitingMessage)
-    return waitUntil(WebScripts.noPasswordField(), MANUAL_TIMEOUT)
+    awaitManual()
+    return waitUntil(WebScripts.noPasswordField(), AFTER_MANUAL_TIMEOUT)
 }
 
 /** Espera a que la página termine de pintar contenido dinámico (Angular) antes de leerla. */
-internal suspend fun UnjbgWebSession.settle(timeoutMs: Long = 8_000L) {
-    waitUntil("document.querySelectorAll('a[href]').length >= 3", timeoutMs, intervalMs = 350)
+internal suspend fun UnjbgWebSession.settle(timeoutMs: Long = 3_000L) {
+    waitUntil("document.querySelectorAll('a[href]').length >= 2", timeoutMs, intervalMs = 250)
 }
 
 /** Convierte un enlace de la página en un archivo del árbol, o `null` si no es un documento. */

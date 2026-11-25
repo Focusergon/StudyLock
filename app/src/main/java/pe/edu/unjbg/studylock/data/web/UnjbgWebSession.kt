@@ -126,6 +126,11 @@ class UnjbgWebSession(private val webView: WebView) {
         CookieManager.getInstance().getCookie(url).orEmpty()
     }
 
+    /** Detiene la carga actual sin destruir el WebView (por ejemplo al cancelar una sincronización). */
+    fun stopLoading() {
+        runCatching { webView.stopLoading() }
+    }
+
     /** Libera el WebView. */
     fun destroy() {
         pending.values.forEach { it.cancel() }
@@ -174,7 +179,7 @@ class UnjbgWebSession(private val webView: WebView) {
 
     companion object {
         const val BRIDGE = "StudyLockBridge"
-        const val NAV_TIMEOUT = 25_000L
+        const val NAV_TIMEOUT = 10_000L
         const val FETCH_TIMEOUT = 30_000L
     }
 }

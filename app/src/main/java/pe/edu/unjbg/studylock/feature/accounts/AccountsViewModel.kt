@@ -3,7 +3,9 @@ package pe.edu.unjbg.studylock.feature.accounts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,8 +14,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import pe.edu.unjbg.studylock.core.text.PdfTextExtractor
 import pe.edu.unjbg.studylock.data.auth.CredentialStore
-import pe.edu.unjbg.studylock.data.content.ContentStore
 import pe.edu.unjbg.studylock.data.auth.UnjbgCredentials
+import pe.edu.unjbg.studylock.data.content.ContentPaths
+import pe.edu.unjbg.studylock.data.content.ContentStore
 import pe.edu.unjbg.studylock.data.web.AulaExtractor
 import pe.edu.unjbg.studylock.data.web.ExtractionResult
 import pe.edu.unjbg.studylock.data.web.FileDownloader
@@ -21,7 +24,6 @@ import pe.edu.unjbg.studylock.data.web.IntranetExtractor
 import pe.edu.unjbg.studylock.data.web.UnjbgWebSession
 import pe.edu.unjbg.studylock.data.web.WebCookies
 import pe.edu.unjbg.studylock.data.web.WebLink
-import pe.edu.unjbg.studylock.data.content.ContentPaths
 import pe.edu.unjbg.studylock.domain.content.ContentMerger
 import pe.edu.unjbg.studylock.domain.content.GeneratedTopic
 import pe.edu.unjbg.studylock.domain.content.HybridQuestionGenerator
@@ -56,6 +58,12 @@ data class AccountsUi(
     /** Enlaces vistos en el mini-navegador, para el modo inspección. */
     val detectedLinks: List<WebLink> = emptyList(),
     val showLinks: Boolean = false,
+    /** Progreso en vivo del recorrido, para poder verlo desde cualquier pantalla. */
+    val syncPhase: String = "",
+    val syncDone: Int = 0,
+    val syncTotal: Int = 0,
+    /** El portal pide intervención: la UI muestra «Ya terminé el ingreso». */
+    val manualLoginNeeded: Boolean = false,
 ) {
     /** Se exige el Aula Virtual; la Intranet se deriva de ella si se marca «misma contraseña». */
     val canSave: Boolean
@@ -81,11 +89,9 @@ object AccountsDefaults {
 }
 
 /**
- * Orquesta la vinculación con la UNJBG: guarda las credenciales cifradas, conduce el mini-navegador
- * para descubrir el contenido y convierte lo elegido en preguntas.
- *
- * El `WebView` lo aporta la UI (Compose) a través de [attachSession]; el ViewModel nunca lo crea ni
- * lo retiene más de lo necesario.
+ * Orquesta la vinculación con la UNJBG. Vive en [AppGraph], no en una ruta: así salir de la pantalla
+ * de Cuentas no destruye el WebView ni cancela la búsqueda, y el árbol parcial se puede ver desde
+ * cualquier pantalla mientras sigue recorriendo los portales.
  */
 class AccountsViewModel(
     private val credentials: CredentialStore,
@@ -93,8 +99,7 @@ class AccountsViewModel(
     private val store: ContentStore,
     private val generator: HybridQuestionGenerator,
     private val downloader: FileDownloader = FileDownloader(),
-    /** Auto-sync diario: la navegación lo activa después de comprobar pref, Wi-Fi y fecha. */
-    private val autoSync: Boolean = false,
+    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
     /** Sílabos sin curso del Aula: se archivan en `agregados/` al generar. */
@@ -103,8 +108,12 @@ class AccountsViewModel(
     private val _ui = MutableStateFlow(AccountsUi())
     val ui: StateFlow<AccountsUi> = _ui.asStateFlow()
 
-    private var sessionReady: CompletableDeferred<UnjbgWebSession>? = null
     private var session: UnjbgWebSession? = null
+    private var sessionReady: CompletableDeferred<UnjbgWebSession> = CompletableDeferred()
+    private var syncJob: Job? = null
+    private var manualLogin: CompletableDeferred<Unit>? = null
+    private var aulaPartial: List<ContentCourse> = emptyList()
+    private var intranetPartial: List<ContentCourse> = emptyList()
 
     init {
         viewModelScope.launch {
@@ -121,10 +130,29 @@ class AccountsViewModel(
                     intranetUrl = stored.intranetUrl.ifBlank { AccountsDefaults.INTRANET_URL },
                 )
             }
-            // Sin WebView todavía no se puede sincronizar: la UI crea el panel en cuanto
-            // `browserVisible` pasa a true y entonces entrega la sesión a `attachSession`.
-            if (autoSync && stored.hasAula) sync()
         }
+    }
+
+    // --- WebView -------------------------------------------------------------
+
+    /** La UI (panel fijo en la raíz) entrega el WebView ya creado. */
+    fun attachSession(webSession: UnjbgWebSession) {
+        session = webSession
+        if (!sessionReady.isCompleted) sessionReady.complete(webSession)
+    }
+
+    /** La UI ha soltado la referencia; no destruimos el WebView al navegar. */
+    fun detachSession() {
+        session = null
+    }
+
+    /**
+     * Prepara el canal de sesión para una nueva corrida. Si el WebView global ya está creado (lo
+     * está desde que se compone la raíz), lo reutiliza en lugar de esperar uno nuevo.
+     */
+    private fun prepareSession() {
+        sessionReady = CompletableDeferred()
+        session?.let { sessionReady.complete(it) }
     }
 
     // --- Edición de credenciales -------------------------------------------
@@ -159,15 +187,12 @@ class AccountsViewModel(
 
     // --- Automatización con el mini-navegador -------------------------------
 
-    /** La UI entrega el WebView listo para usarse. */
-    fun attachSession(webSession: UnjbgWebSession) {
-        session = webSession
-        sessionReady?.complete(webSession)
-    }
-
-    /** La UI destruyó el WebView. */
-    fun detachSession() {
-        session = null
+    /** Auto-sync diario: se llama al entrar a la ruta `accounts?autoSync=true`. */
+    fun syncFromAuto() {
+        viewModelScope.launch {
+            if (!credentials.current().hasAula || _ui.value.syncing) return@launch
+            sync()
+        }
     }
 
     /** Inicia sesión en Aula e Intranet, recorre el contenido y arma el árbol. */
@@ -179,8 +204,13 @@ class AccountsViewModel(
         }
         if (state.syncing) return
 
-        val ready = CompletableDeferred<UnjbgWebSession>()
-        sessionReady = ready
+        syncJob?.cancel()
+        manualLogin?.cancel()
+        manualLogin = null
+        prepareSession()
+        aulaPartial = emptyList()
+        intranetPartial = emptyList()
+
         _ui.update {
             it.copy(
                 syncing = true,
@@ -188,59 +218,158 @@ class AccountsViewModel(
                 resultMessage = null,
                 tree = emptyList(),
                 selected = emptySet(),
-                browserVisible = true,
-                notices = emptyList(),
                 detectedLinks = emptyList(),
+                notices = emptyList(),
                 showLinks = false,
+                manualLoginNeeded = false,
+                syncPhase = "Preparando",
+                syncDone = 0,
+                syncTotal = 0,
                 status = "Preparando el navegador…",
+                browserVisible = true,
             )
         }
 
-        viewModelScope.launch {
+        syncJob = viewModelScope.launch {
             val creds = currentCredentials()
             runCatching { credentials.save(creds) }
             val status: (String) -> Unit = { message -> _ui.update { it.copy(status = message) } }
 
-            val webSession = ready.await()
-            val aula = runCatching { AulaExtractor(webSession, state.aulaUrl).sync(creds, status) }
-                .getOrDefault(ExtractionResult(notice = "No se pudo leer el Aula Virtual."))
-            val intranet = if (creds.hasIntranet) {
-                runCatching { IntranetExtractor(webSession, state.intranetUrl).sync(creds, status) }
-                    .getOrDefault(ExtractionResult(notice = "No se pudo leer la Intranet."))
-            } else {
-                ExtractionResult()
+            val awaitManual: suspend () -> Unit = {
+                val signal = CompletableDeferred<Unit>()
+                manualLogin = signal
+                _ui.update {
+                    it.copy(
+                        manualLoginNeeded = true,
+                        status = "Completa el ingreso en la ventanita y pulsa «Ya terminé».",
+                    )
+                }
+                signal.await()
+                _ui.update { it.copy(manualLoginNeeded = false) }
             }
 
-            val merged = ContentMerger.merge(aula.courses, intranet.courses)
-            unmatchedSyllabi = merged.unmatchedSyllabi
-            val tree = merged.courses
-            val notices = listOfNotNull(aula.notice, intranet.notice) + if (unmatchedSyllabi.isEmpty()) {
-                emptyList()
-            } else {
-                listOf(
-                    "${unmatchedSyllabi.size} sílabo(s) no coinciden con ningún curso del Aula. " +
-                        "Se guardarán en «Agregados» con una aviso; no se creó ningún curso falso."
-                )
-            }
-            val links = (aula.detectedLinks + intranet.detectedLinks)
-                .distinctBy { it.href + it.text }
-                .take(200)
-            val autoSelected = tree.flatMap { course -> course.files.filter { it.isImportable }.map { it.url } }.toSet()
-            _ui.update {
-                it.copy(
-                    syncing = false,
-                    browserVisible = false,
-                    status = "",
-                    tree = tree,
-                    selected = autoSelected,
-                    notices = notices,
-                    detectedLinks = links,
-                    // Sin contenido no mostramos un error genérico: el aviso ya dice qué pasó.
-                    error = null,
-                )
+            try {
+                val webSession = sessionReady.await()
+                val aula = runCatching {
+                    AulaExtractor(webSession, state.aulaUrl).sync(
+                        credentials = creds,
+                        status = status,
+                        awaitManual = awaitManual,
+                        onPartial = { partial, done, total ->
+                            aulaPartial = partial
+                            publishPartial("Aula", done, total)
+                        },
+                    )
+                }.getOrDefault(ExtractionResult(notice = "No se pudo leer el Aula Virtual."))
+
+                val intranet = if (creds.hasIntranet) {
+                    runCatching {
+                        IntranetExtractor(webSession, state.intranetUrl).sync(
+                            credentials = creds,
+                            status = status,
+                            awaitManual = awaitManual,
+                            onPartial = { partial, done, total ->
+                                intranetPartial = partial
+                                publishPartial("Intranet", done, total)
+                            },
+                        )
+                    }.getOrDefault(ExtractionResult(notice = "No se pudo leer la Intranet."))
+                } else {
+                    ExtractionResult()
+                }
+
+                val merged = ContentMerger.merge(aula.courses, intranet.courses)
+                unmatchedSyllabi = merged.unmatchedSyllabi
+                val tree = merged.courses
+                val notices = listOfNotNull(aula.notice, intranet.notice) + if (unmatchedSyllabi.isEmpty()) {
+                    emptyList()
+                } else {
+                    listOf(
+                        "${unmatchedSyllabi.size} sílabo(s) no coinciden con ningún curso del Aula. " +
+                            "Se guardarán en «Agregados» con una aviso; no se creó ningún curso falso."
+                    )
+                }
+                val links = (aula.detectedLinks + intranet.detectedLinks)
+                    .distinctBy { it.href + it.text }
+                    .take(200)
+                _ui.update {
+                    it.copy(
+                        syncing = false,
+                        browserVisible = false,
+                        status = "",
+                        syncPhase = "",
+                        syncDone = 0,
+                        syncTotal = 0,
+                        manualLoginNeeded = false,
+                        tree = tree,
+                        selected = autoSelected(tree),
+                        notices = notices,
+                        detectedLinks = links,
+                        error = null,
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cancelación del usuario: el estado ya lo dejó cancelSync().
+                throw e
+            } catch (e: Exception) {
+                _ui.update {
+                    it.copy(
+                        syncing = false,
+                        browserVisible = false,
+                        manualLoginNeeded = false,
+                        syncPhase = "",
+                        status = "",
+                        error = "No se pudo completar la sincronización: ${e.message}",
+                    )
+                }
             }
         }
     }
+
+    /** El usuario terminó captcha/SSO en el mini-navegador. */
+    fun confirmManualLogin() {
+        manualLogin?.complete(Unit)
+        _ui.update { it.copy(manualLoginNeeded = false) }
+    }
+
+    /** Corta la búsqueda sin destruir el WebView global. */
+    fun cancelSync() {
+        syncJob?.cancel()
+        syncJob = null
+        manualLogin?.cancel()
+        manualLogin = null
+        session?.stopLoading()
+        _ui.update {
+            it.copy(
+                syncing = false,
+                browserVisible = false,
+                manualLoginNeeded = false,
+                status = "",
+                syncPhase = "",
+                syncDone = 0,
+                syncTotal = 0,
+                notices = it.notices + "Sincronización cancelada.",
+            )
+        }
+    }
+
+    private fun publishPartial(phase: String, done: Int, total: Int) {
+        val merged = ContentMerger.merge(aulaPartial, intranetPartial)
+        val tree = merged.courses
+        unmatchedSyllabi = merged.unmatchedSyllabi
+        _ui.update { state ->
+            state.copy(
+                tree = tree,
+                selected = state.selected + autoSelected(tree),
+                syncPhase = phase,
+                syncDone = done,
+                syncTotal = total,
+            )
+        }
+    }
+
+    private fun autoSelected(tree: List<ContentCourse>): Set<String> =
+        tree.flatMap { course -> course.files.filter { it.isImportable }.map { it.url } }.toSet()
 
     // --- Selección del árbol ------------------------------------------------
 
@@ -253,7 +382,9 @@ class AccountsViewModel(
         state.copy(selected = state.tree.flatMap { it.files }.map { it.url }.toSet())
     }
 
-    fun clearSelection() = _ui.update { it.copy(selected = emptySet()) }
+    fun clearSelection() = _ui.update { state ->
+        state.copy(selected = emptySet())
+    }
 
     // --- Generación de preguntas -------------------------------------------
 
@@ -347,6 +478,7 @@ class AccountsViewModel(
 
     /** Cierra la sesión: borra cookies y credenciales guardadas. */
     fun logout() {
+        cancelSync()
         viewModelScope.launch {
             WebCookies.clear()
             runCatching { credentials.clear() }
@@ -356,6 +488,8 @@ class AccountsViewModel(
                     intranetPassword = "",
                     tree = emptyList(),
                     selected = emptySet(),
+                    detectedLinks = emptyList(),
+                    notices = emptyList(),
                     resultMessage = "Sesión cerrada y credenciales eliminadas.",
                     error = null,
                 )
@@ -447,8 +581,8 @@ class AccountsViewModel(
         return stored to text
     }
 
-    private suspend fun downloadBytes(file: ContentFile): ByteArray? {
+    private suspend fun downloadBytes(file: ContentFile): ByteArray? = withContext(io) {
         val cookie = WebCookies.cookieFor(file.url)
-        return downloader.download(file.url, cookie)
+        downloader.download(file.url, cookie)
     }
 }

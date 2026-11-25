@@ -1,5 +1,6 @@
 package pe.edu.unjbg.studylock.navigation
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -22,7 +23,7 @@ import pe.edu.unjbg.studylock.core.designsystem.SlColors
 import pe.edu.unjbg.studylock.di.AppGraph
 import pe.edu.unjbg.studylock.feature.access.AccessActiveScreen
 import pe.edu.unjbg.studylock.feature.accounts.AccountsScreen
-import pe.edu.unjbg.studylock.feature.accounts.AccountsViewModel
+import pe.edu.unjbg.studylock.feature.accounts.SyncBrowserHost
 import pe.edu.unjbg.studylock.feature.courses.CourseDetailScreen
 import pe.edu.unjbg.studylock.feature.courses.CourseDetailViewModel
 import pe.edu.unjbg.studylock.feature.courses.CoursesScreen
@@ -36,6 +37,8 @@ import pe.edu.unjbg.studylock.feature.onboarding.AppSelectionScreen
 import pe.edu.unjbg.studylock.feature.onboarding.ConnectAccountScreen
 import pe.edu.unjbg.studylock.feature.onboarding.OnboardingViewModel
 import pe.edu.unjbg.studylock.feature.onboarding.PermissionsScreen
+import pe.edu.unjbg.studylock.feature.onboarding.ReturningScreen
+import pe.edu.unjbg.studylock.feature.onboarding.ReturningViewModel
 import pe.edu.unjbg.studylock.feature.onboarding.WelcomeScreen
 import pe.edu.unjbg.studylock.feature.progress.ProgressScreen
 import pe.edu.unjbg.studylock.feature.progress.ProgressViewModel
@@ -65,7 +68,7 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
         val now = System.currentTimeMillis()
         if (now - current.lastAutoSyncAt < 24L * 60 * 60 * 1_000) return@LaunchedEffect
         graph.prefs.markAutoSyncAttempt(now)
-        nav.navigate(Routes.ACCOUNTS_AUTO)
+        nav.navigate(Routes.accounts(autoSync = true))
     }
 
     fun navigateTab(target: String) {
@@ -95,17 +98,38 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
             }
         },
     ) { padding ->
-        NavHost(
-            navController = nav,
-            startDestination = if (startOnboarding) Routes.WELCOME else Routes.HOME,
+        // El mini-navegador vive fuera del NavHost: cambiar de pantalla no lo destruye.
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = padding.calculateBottomPadding()),
         ) {
+            NavHost(
+                navController = nav,
+                startDestination = if (startOnboarding) Routes.WELCOME else Routes.HOME,
+                modifier = Modifier.weight(1f),
+            ) {
             composable(Routes.WELCOME) {
                 WelcomeScreen(
                     onStart = { nav.navigate(Routes.ACCOUNT) },
-                    onConnect = { nav.navigate(Routes.ACCOUNT) },
+                    onConnect = { nav.navigate(Routes.RETURNING) },
+                )
+            }
+
+            composable(Routes.RETURNING) {
+                val vm: ReturningViewModel = viewModel(
+                    factory = viewModelFactory { ReturningViewModel(graph.prefs, graph.credentials) },
+                )
+                ReturningScreen(
+                    viewModel = vm,
+                    onContinue = {
+                        nav.navigate(Routes.HOME) {
+                            popUpTo(Routes.WELCOME) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                    onFullSetup = { nav.navigate(Routes.ACCOUNT) },
+                    onSync = { nav.navigate(Routes.ACCOUNTS) },
                 )
             }
 
@@ -289,24 +313,19 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
             composable(Routes.ACCESS_ACTIVE) {
                 AccessActiveScreen(onClose = { nav.popBackStack() })
             }
+            }
+            SyncBrowserHost(graph.accounts)
         }
     }
 }
 
 @Composable
 private fun AccountsDestination(graph: AppGraph, nav: NavHostController, autoSync: Boolean) {
-    val vm: AccountsViewModel = viewModel(
-        factory = viewModelFactory {
-            AccountsViewModel(
-                credentials = graph.credentials,
-                content = graph.content,
-                store = graph.contentStore,
-                generator = graph.questionGenerator,
-                autoSync = autoSync,
-            )
-        },
-    )
-    AccountsScreen(viewModel = vm, onBack = { nav.popBackStack() })
+    // El controlador es app-scoped: la sincronización sigue aunque el usuario salga de esta ruta.
+    LaunchedEffect(autoSync) {
+        if (autoSync) graph.accounts.syncFromAuto()
+    }
+    AccountsScreen(viewModel = graph.accounts, onBack = { nav.popBackStack() })
 }
 
 @Composable

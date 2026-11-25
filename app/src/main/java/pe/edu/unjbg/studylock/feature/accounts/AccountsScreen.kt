@@ -67,14 +67,8 @@ fun AccountsScreen(viewModel: AccountsViewModel, onBack: () -> Unit) {
     SlScreen {
         SlTopBar(onBack = onBack, title = "Cuentas UNJBG")
 
-        if (ui.browserVisible) {
-            WebAutomationPanel(
-                status = ui.status,
-                onSession = viewModel::attachSession,
-                onDestroyed = viewModel::detachSession,
-                modifier = Modifier.padding(horizontal = 22.dp, vertical = 6.dp),
-            )
-        }
+        // El mini-navegador ya no vive aquí: está en SyncBrowserHost, en la raíz de la app.
+        // Salir de esta pantalla no lo destruye ni corta la sincronización.
 
         LazyColumn(
             modifier = Modifier

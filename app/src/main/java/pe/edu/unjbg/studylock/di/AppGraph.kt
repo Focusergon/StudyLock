@@ -18,7 +18,9 @@ import pe.edu.unjbg.studylock.data.repos.MinuteRepositoryImpl
 import pe.edu.unjbg.studylock.data.repos.ScheduleRepositoryImpl
 import pe.edu.unjbg.studylock.data.repos.StatsRepositoryImpl
 import pe.edu.unjbg.studylock.data.repos.StudyRepositoryImpl
+import pe.edu.unjbg.studylock.data.web.FileDownloader
 import pe.edu.unjbg.studylock.domain.content.HybridQuestionGenerator
+import pe.edu.unjbg.studylock.feature.accounts.AccountsViewModel
 
 /**
  * Inyección de dependencias manual.
@@ -52,6 +54,15 @@ class AppGraph(context: Context) {
     val schedule by lazy { ScheduleRepositoryImpl(db) }
 
     val notifications by lazy { StudyLockNotifications(appContext) }
+    val fileDownloader: FileDownloader by lazy { FileDownloader() }
+
+    /**
+     * Controlador único de la sincronización UNJBG. Vive aquí y no en una ruta para que salir de
+     * «Cuentas» no destruya el WebView ni cancele la búsqueda.
+     */
+    val accounts: AccountsViewModel by lazy {
+        AccountsViewModel(credentials, content, contentStore, questionGenerator, fileDownloader)
+    }
 
     val gate: BlockingGate by lazy {
         BlockingGate(appContext, minutes, blockedApps, accessStore, prefs, notifications)

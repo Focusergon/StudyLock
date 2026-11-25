@@ -2,6 +2,8 @@ package pe.edu.unjbg.studylock.navigation
 
 object Routes {
     const val WELCOME = "onboarding/welcome"
+    /** Retorno rápido: solo confirma el correo; no repite permisos, apps ni credenciales. */
+    const val RETURNING = "onboarding/returning"
     const val ACCOUNT = "onboarding/account"
     const val PERMISSIONS = "onboarding/permissions"
     const val APPS = "onboarding/apps"
@@ -16,8 +18,11 @@ object Routes {
     const val SCHEDULE = "schedule"
     const val BLOCKED_APPS = "blocked_apps"
     const val ACCOUNTS = "accounts"
-    /** Auto-sync diario: abre la misma pantalla con el flag que dispara `sync()` al cargar. */
-    const val ACCOUNTS_AUTO = "accounts?autoSync=true"
+    /** Patrón con argumento para el auto-sync diario (Navigation lo parsea como `autoSync`). */
+    const val ACCOUNTS_AUTO = "accounts?autoSync={autoSync}"
+
+    fun accounts(autoSync: Boolean = false): String =
+        if (autoSync) "accounts?autoSync=true" else ACCOUNTS
 
     const val COURSE_DETAIL = "course/{courseId}"
     const val START_REVIEW = "start_review/{courseId}"

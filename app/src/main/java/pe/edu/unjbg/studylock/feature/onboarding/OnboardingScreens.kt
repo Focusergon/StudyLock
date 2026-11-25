@@ -147,6 +147,93 @@ fun WelcomeScreen(onStart: () -> Unit, onConnect: () -> Unit) {
 }
 
 @Composable
+fun ReturningScreen(
+    viewModel: ReturningViewModel,
+    onContinue: () -> Unit,
+    onFullSetup: () -> Unit,
+    onSync: () -> Unit,
+) {
+    val ui by viewModel.ui.collectAsStateWithLifecycle()
+
+    SlScreen {
+        SlTopBar(onBack = onFullSetup, title = "Ya tengo cuenta")
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 22.dp),
+        ) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Solo confirma tu correo institucional",
+                style = MaterialTheme.typography.headlineSmall,
+                color = SlColors.Ink,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "El resto ya está configurado en este dispositivo: permisos, apps limitadas y " +
+                    "credenciales UNJBG. No vuelvas a escribirlos.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = SlColors.Muted,
+            )
+
+            Spacer(Modifier.height(22.dp))
+            SlTextField(
+                label = "Correo institucional o Gmail",
+                value = ui.email,
+                onValueChange = viewModel::setEmail,
+                placeholder = "nombre@unjbg.edu.pe",
+                keyboardType = KeyboardType.Email,
+            )
+            if (ui.error != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(ui.error!!, style = MaterialTheme.typography.bodySmall, color = SlColors.Danger)
+            }
+
+            Spacer(Modifier.height(18.dp))
+            SlCard(color = if (ui.hasSavedAccount) SlColors.Mint else SlColors.DangerSoft, border = false) {
+                Text(
+                    text = if (ui.hasSavedAccount) {
+                        "Cuentas UNJBG ya vinculadas"
+                    } else {
+                        "No hay credenciales guardadas en este dispositivo"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = SlColors.Ink,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = if (ui.hasSavedAccount) {
+                        "Puedes sincronizar tus cursos cuando quieras desde Cuentas UNJBG."
+                    } else {
+                        "Si desinstalaste la app, necesitas vincularlas una sola vez."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SlColors.Muted,
+                )
+                if (!ui.hasSavedAccount && ui.loaded) {
+                    Spacer(Modifier.height(12.dp))
+                    SlTextButton(text = "Vincular ahora", onClick = onFullSetup, color = SlColors.Primary)
+                }
+            }
+
+            Spacer(Modifier.height(22.dp))
+            SlPrimaryButton(
+                text = "Continuar al Inicio",
+                onClick = { viewModel.continueToApp(onContinue) },
+                enabled = ui.canContinue,
+                icon = null,
+            )
+            Spacer(Modifier.height(8.dp))
+            SlTextButton(text = "Sincronizar mis cursos", onClick = onSync, color = SlColors.Primary)
+            Spacer(Modifier.height(6.dp))
+            SlTextButton(text = "Empezar configuración completa", onClick = onFullSetup, color = SlColors.Muted)
+            Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
 private fun BenefitRow(icon: ImageVector, text: String) {
     Row(
         modifier = Modifier

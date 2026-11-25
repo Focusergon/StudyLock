@@ -16,7 +16,12 @@ class IntranetExtractor(
     private val baseUrl: String,
 ) {
 
-    suspend fun sync(credentials: UnjbgCredentials, status: (String) -> Unit): ExtractionResult {
+    suspend fun sync(
+        credentials: UnjbgCredentials,
+        status: (String) -> Unit,
+        awaitManual: suspend () -> Unit = {},
+        onPartial: (List<ContentCourse>, Int, Int) -> Unit = { _, _, _ -> Unit },
+    ): ExtractionResult {
         status("Abriendo la Intranet…")
         session.open(baseUrl)
 
@@ -25,7 +30,8 @@ class IntranetExtractor(
             password = credentials.effectiveIntranetPassword,
             status = status,
             loginMessage = "Iniciando sesión en la Intranet…",
-            waitingMessage = "Completa el inicio de sesión en la ventana…",
+            waitingMessage = "Completa el inicio de sesión en la ventana y pulsa «Ya terminé».",
+            awaitManual = awaitManual,
         )
         if (!loggedIn) {
             return ExtractionResult(notice = "No se pudo iniciar sesión en la Intranet. Revisa tus credenciales.")
@@ -59,12 +65,13 @@ class IntranetExtractor(
                 source = ContentSource.INTRANET,
                 sections = sections,
             )
+            onPartial(tree.toList(), index + 1, syllabusLinks.size)
         }
         return ExtractionResult(courses = tree)
     }
 
     private companion object {
-        const val MAX_SYLLABUS_PAGES = 20
-        const val MAX_PAGES_PER_COURSE = 6
+        const val MAX_SYLLABUS_PAGES = 8
+        const val MAX_PAGES_PER_COURSE = 3
     }
 }
