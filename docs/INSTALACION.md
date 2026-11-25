@@ -40,10 +40,12 @@ instalar hasta firmarlo).
 
 ### Opción B — Descargarlo ya compilado
 
-Desde la sección **Releases** del repositorio:
-`https://github.com/Focusergon/StudyLock/releases`
+Para las betas, usa siempre este enlace fijo (apunta a la última beta firmada):
 
-Descarga el archivo `app-release.apk` del último release.
+`https://github.com/Focusergon/StudyLock/releases/download/beta-latest/StudyLock-beta-latest.apk`
+
+También están todas las versiones en `https://github.com/Focusergon/StudyLock/releases`.
+Si descargas un release numerado, el archivo se llama `StudyLock-<versión>.apk`.
 
 > **Copia el archivo al teléfono por cable USB, Google Drive o descarga directa.**
 > Evita enviarlo por WhatsApp/Telegram: a veces renombran o truncan el `.apk` y aparece el error

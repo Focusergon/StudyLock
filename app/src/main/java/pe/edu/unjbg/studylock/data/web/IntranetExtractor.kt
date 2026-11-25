@@ -1,5 +1,6 @@
 package pe.edu.unjbg.studylock.data.web
 
+import pe.edu.unjbg.studylock.core.log.StudyLockLog
 import pe.edu.unjbg.studylock.data.auth.UnjbgCredentials
 import pe.edu.unjbg.studylock.domain.model.ContentCourse
 import pe.edu.unjbg.studylock.domain.model.ContentSource
@@ -23,6 +24,7 @@ class IntranetExtractor(
         onPartial: (List<ContentCourse>, Int, Int) -> Unit = { _, _, _ -> Unit },
     ): ExtractionResult {
         status("Abriendo la Intranet…")
+        StudyLockLog.log("Intranet", "Abriendo la Intranet…")
         session.open(baseUrl)
 
         val loggedIn = session.loginWith(
@@ -45,6 +47,7 @@ class IntranetExtractor(
             .filter { LinkClassifier.isSyllabusLink(it.text, it.href) }
             .distinctBy { LinkClassifier.canonical(it.href) }
             .take(MAX_SYLLABUS_PAGES)
+        StudyLockLog.log("Intranet", "Enlaces detectados: ${allLinks.size} · sílabos: ${syllabusLinks.size}")
 
         if (syllabusLinks.isEmpty()) {
             return ExtractionResult(
@@ -57,7 +60,9 @@ class IntranetExtractor(
         syllabusLinks.forEachIndexed { index, link ->
             val name = link.text.trim().ifBlank { "Sílabos" }
             status("Revisando «${name.take(42)}» (${index + 1}/${syllabusLinks.size})…")
+            StudyLockLog.log("Intranet", "Revisando sílabo ${index + 1}/${syllabusLinks.size}: ${name.take(60)}")
             val sections = session.crawlSections(link.href, maxPages = MAX_PAGES_PER_COURSE)
+            StudyLockLog.log("Intranet", "Sílabo ${index + 1}: ${sections.size} sección(es)")
             tree += ContentCourse(
                 id = LinkClassifier.canonical(link.href),
                 name = name.take(90),

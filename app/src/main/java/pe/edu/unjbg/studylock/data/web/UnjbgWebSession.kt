@@ -144,11 +144,17 @@ class UnjbgWebSession(private val webView: WebView) {
 
     // --- Interno ------------------------------------------------------------
 
+    /**
+     * Ejecuta un script con límite de tiempo. Sin este timeout, si la página navega mientras el
+     * `evaluateJavascript` está pendiente, el callback nunca llega y la sincronización se cuelga.
+     */
     private suspend fun evaluate(script: String): String? = withContext(Dispatchers.Main) {
-        suspendCancellableCoroutine { cont ->
-            runCatching {
-                webView.evaluateJavascript(script) { value -> if (cont.isActive) cont.resume(value) }
-            }.onFailure { if (cont.isActive) cont.resume(null) }
+        withTimeoutOrNull(EVAL_TIMEOUT) {
+            suspendCancellableCoroutine<String?> { cont ->
+                runCatching {
+                    webView.evaluateJavascript(script) { value -> if (cont.isActive) cont.resume(value) }
+                }.onFailure { if (cont.isActive) cont.resume(null) }
+            }
         }
     }
 
@@ -180,6 +186,8 @@ class UnjbgWebSession(private val webView: WebView) {
     companion object {
         const val BRIDGE = "StudyLockBridge"
         const val NAV_TIMEOUT = 10_000L
+        /** Límite por llamada `evaluateJavascript`; evita esperas infinitas al navegar. */
+        const val EVAL_TIMEOUT = 4_000L
         const val FETCH_TIMEOUT = 30_000L
     }
 }

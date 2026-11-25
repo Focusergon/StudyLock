@@ -1,5 +1,6 @@
 package pe.edu.unjbg.studylock.data.web
 
+import pe.edu.unjbg.studylock.core.log.StudyLockLog
 import pe.edu.unjbg.studylock.domain.model.ContentFile
 import pe.edu.unjbg.studylock.domain.model.ContentSection
 
@@ -78,12 +79,16 @@ internal suspend fun UnjbgWebSession.crawlSections(
         val url = queue.removeFirst()
         val key = LinkClassifier.canonical(url)
         if (!visited.add(key)) continue
-        if (!open(url)) continue
+        if (!open(url)) {
+            StudyLockLog.warning("Web", "No se pudo abrir la página $key")
+            continue
+        }
         settle()
         pages++
 
         val links = collectLinks()
         val files = links.mapNotNull { fileFromLink(it) }.distinctBy { it.url }
+        StudyLockLog.log("Web", "Página $pages/$maxPages · $key · enlaces=${links.size} archivos=${files.size}")
         if (files.isNotEmpty()) {
             val title = runJs(WebScripts.pageTitle()).orEmpty().trim().ifBlank { "Material" }
             sections += ContentSection(id = key, name = title.take(90), files = files)

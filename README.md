@@ -15,14 +15,19 @@ se descuentan solo mientras usas esa app.
 > **[docs/INSTALACION.md](docs/INSTALACION.md)** (requisitos, instalación y solución de errores
 > como «App no instalada» o «configuración restringida» de accesibilidad en Android 13+).
 
-> **Beta actual: `v0.3.0-beta.3` (APK firmado, `versionCode 5`).** Se instala directamente sobre
-> `v0.3.0-beta.2` sin desinstalar y conserva cursos, minutos y preferencias. Corrige la pantalla en
-> blanco de la beta.2: el WebView ahora se crea solo cuando se sincroniza y un fallo se registra en
-> vez de tumbar la app. Incluye además **Ajustes → Registro de errores**, donde puedes ver, copiar
-> y compartir los fallos desde el celular, sin cable. Mantiene el flujo **«Ya tengo cuenta»** corto
-> y la sincronización persistente con árbol parcial, progreso, ingreso manual y Cancelar. El servidor
-> con mapa del árbol sigue diferido hasta terminar el MVP. El asset del modelo local
-> (`model-gemma3-270m`) aún debe publicarse para que el botón de descarga funcione.
+> **Beta actual: `v0.3.0-beta.4` (APK firmado, `versionCode 6`).** Se instala directamente sobre
+> `v0.3.0-beta.3` sin desinstalar y conserva cursos, minutos y preferencias.
+>
+> **Descarga fija de betas (siempre apunta a la última):**
+> `https://github.com/Focusergon/StudyLock/releases/download/beta-latest/StudyLock-beta-latest.apk`
+>
+> Corrige el colgamiento de la sincronización: cada llamada JavaScript tiene timeout (4 s), hay un
+> vigilante global de 6 minutos que corta y muestra el árbol parcial, y se registran los pasos del
+> Aula y la Intranet en **Ajustes → Registro de errores**. Los cursos sin archivos también se ven.
+> Mantiene el flujo **«Ya tengo cuenta»** corto, el visor de errores dentro de la app y la
+> sincronización persistente con progreso, ingreso manual y Cancelar. El servidor con mapa del árbol
+> sigue diferido hasta terminar el MVP. El asset del modelo local (`model-gemma3-270m`) aún debe
+> publicarse para que el botón de descarga funcione.
 
 ---
 
@@ -167,8 +172,10 @@ existe, la build de release sigue funcionando pero genera un APK sin firmar
 > **Importante**: si pierdes el keystore o su contraseña no podrás publicar actualizaciones de
 > la app con la misma identidad. Respalda `studylock-release.jks` y la contraseña.
 
-La distribución se hace publicando el APK firmado en GitHub Releases. El modelo local se publica
-en el Release separado `model-gemma3-270m`; su binario no se versiona en el repositorio.
+La distribución se hace publicando el APK firmado en GitHub Releases. Para las betas hay un release
+fijo `beta-latest`: su asset mantiene siempre el mismo nombre (`StudyLock-beta-latest.apk`) y se
+reemplaza en cada versión, así que el enlace de descarga no cambia. El modelo local se publica en el
+Release separado `model-gemma3-270m`; su binario no se versiona en el repositorio.
 
 ### Stack
 - Kotlin + Jetpack Compose (Material 3), `minSdk 26`, `compileSdk/targetSdk 37`.

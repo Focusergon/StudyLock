@@ -6,6 +6,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,7 +76,8 @@ data class AccountsUi(
 
     val canSync: Boolean get() = canSave && !syncing && !saving
 
-    val hasTree: Boolean get() = tree.any { it.files.isNotEmpty() }
+    /** Un curso sin archivos también es árbol: debe verse con «Sin archivos detectados». */
+    val hasTree: Boolean get() = tree.isNotEmpty()
 
     val selectedCount: Int get() = selected.size
 
@@ -114,6 +116,8 @@ class AccountsViewModel(
     private var session: UnjbgWebSession? = null
     private var sessionReady: CompletableDeferred<UnjbgWebSession> = CompletableDeferred()
     private var syncJob: Job? = null
+    /** Vigilante que corta la búsqueda si un portal se cuelga y deja la UI usable. */
+    private var syncWatchdog: Job? = null
     private var manualLogin: CompletableDeferred<Unit>? = null
     private var aulaPartial: List<ContentCourse> = emptyList()
     private var intranetPartial: List<ContentCourse> = emptyList()
@@ -352,6 +356,25 @@ class AccountsViewModel(
                 }
             }
         }
+
+        // Vigilante: si el WebView se queda sin responder, cortamos y mostramos lo ya encontrado.
+        syncWatchdog?.cancel()
+        syncWatchdog = viewModelScope.launch {
+            delay(SYNC_TIMEOUT)
+            if (syncJob?.isActive == true) {
+                StudyLockLog.error(
+                    "Cuentas",
+                    IllegalStateException("Sincronización excedió ${SYNC_TIMEOUT / 1000} s"),
+                )
+                cancelSync()
+                _ui.update {
+                    it.copy(
+                        error = "La sincronización tardó demasiado y se detuvo. " +
+                            "Se conserva el árbol encontrado hasta ahora.",
+                    )
+                }
+            }
+        }
     }
 
     /** El usuario terminó captcha/SSO en el mini-navegador. */
@@ -362,6 +385,8 @@ class AccountsViewModel(
 
     /** Corta la búsqueda sin destruir el WebView global. */
     fun cancelSync() {
+        syncWatchdog?.cancel()
+        syncWatchdog = null
         syncJob?.cancel()
         syncJob = null
         manualLogin?.cancel()
@@ -385,6 +410,7 @@ class AccountsViewModel(
         val merged = ContentMerger.merge(aulaPartial, intranetPartial)
         val tree = merged.courses
         unmatchedSyllabi = merged.unmatchedSyllabi
+        StudyLockLog.log("Cuentas", "Árbol parcial · $phase $done/$total · ${tree.size} curso(s)")
         _ui.update { state ->
             state.copy(
                 tree = tree,
@@ -612,5 +638,10 @@ class AccountsViewModel(
     private suspend fun downloadBytes(file: ContentFile): ByteArray? = withContext(io) {
         val cookie = WebCookies.cookieFor(file.url)
         downloader.download(file.url, cookie)
+    }
+
+    private companion object {
+        /** Límite global: si un portal se cuelga, se corta y se conserva el árbol parcial. */
+        const val SYNC_TIMEOUT = 6 * 60_000L
     }
 }

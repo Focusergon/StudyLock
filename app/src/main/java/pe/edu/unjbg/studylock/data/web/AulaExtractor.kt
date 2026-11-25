@@ -1,5 +1,6 @@
 package pe.edu.unjbg.studylock.data.web
 
+import pe.edu.unjbg.studylock.core.log.StudyLockLog
 import pe.edu.unjbg.studylock.data.auth.UnjbgCredentials
 import pe.edu.unjbg.studylock.domain.model.ContentCourse
 import pe.edu.unjbg.studylock.domain.model.ContentSource
@@ -48,6 +49,7 @@ class AulaExtractor(
             .filter { LinkClassifier.looksLikeCourse(it.text, it.href) }
             .distinctBy { LinkClassifier.canonical(it.href) }
             .take(MAX_COURSES)
+        StudyLockLog.log("Aula", "Enlaces detectados: ${allLinks.size} · cursos: ${courses.size}")
 
         if (courses.isEmpty()) {
             return ExtractionResult(
@@ -60,7 +62,9 @@ class AulaExtractor(
         courses.forEachIndexed { index, link ->
             val name = link.text.trim().ifBlank { LinkClassifier.fileNameFromUrl(link.href) }
             status("Revisando «${name.take(42)}» (${index + 1}/${courses.size})…")
+            StudyLockLog.log("Aula", "Revisando curso ${index + 1}/${courses.size}: ${name.take(60)}")
             val sections = session.crawlSections(link.href, maxPages = MAX_PAGES_PER_COURSE)
+            StudyLockLog.log("Aula", "Curso ${index + 1}: ${sections.size} sección(es)")
             tree += ContentCourse(
                 id = LinkClassifier.canonical(link.href),
                 name = name.take(90),

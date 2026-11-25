@@ -528,7 +528,7 @@ fun SettingsScreen(
                         .padding(vertical = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("StudyLock 0.3.0-beta.3", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
+                    Text("StudyLock 0.3.0-beta.4", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
                     Text(
                         "Hecho para estudiantes de la UNJBG",
                         style = MaterialTheme.typography.bodySmall,
