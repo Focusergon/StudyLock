@@ -3,8 +3,12 @@ package pe.edu.unjbg.studylock.di
 import android.content.Context
 import pe.edu.unjbg.studylock.blocking.BlockingGate
 import pe.edu.unjbg.studylock.blocking.StudyLockNotifications
+import pe.edu.unjbg.studylock.data.ai.LocalQuestionAiProvider
+import pe.edu.unjbg.studylock.data.ai.ModelDownloader
 import pe.edu.unjbg.studylock.data.auth.CredentialStore
+import pe.edu.unjbg.studylock.data.content.ContentStore
 import pe.edu.unjbg.studylock.data.local.StudyLockDatabase
+import pe.edu.unjbg.studylock.data.network.NetworkStatus
 import pe.edu.unjbg.studylock.data.prefs.AccessStore
 import pe.edu.unjbg.studylock.data.prefs.UserPreferences
 import pe.edu.unjbg.studylock.data.repos.BlockedAppsRepositoryImpl
@@ -14,6 +18,7 @@ import pe.edu.unjbg.studylock.data.repos.MinuteRepositoryImpl
 import pe.edu.unjbg.studylock.data.repos.ScheduleRepositoryImpl
 import pe.edu.unjbg.studylock.data.repos.StatsRepositoryImpl
 import pe.edu.unjbg.studylock.data.repos.StudyRepositoryImpl
+import pe.edu.unjbg.studylock.domain.content.HybridQuestionGenerator
 
 /**
  * Inyección de dependencias manual.
@@ -29,6 +34,14 @@ class AppGraph(context: Context) {
     val prefs: UserPreferences by lazy { UserPreferences(appContext) }
     val accessStore: AccessStore by lazy { AccessStore(appContext) }
     val credentials: CredentialStore by lazy { CredentialStore(appContext) }
+    val contentStore: ContentStore by lazy { ContentStore(appContext) }
+    val network: NetworkStatus by lazy { NetworkStatus(appContext) }
+    val modelDownloader: ModelDownloader by lazy { ModelDownloader(appContext, network) }
+    val aiProvider: LocalQuestionAiProvider by lazy { LocalQuestionAiProvider(modelDownloader) }
+    /** IA local opcional + respaldo determinista; nunca depende de una clave ni de un servidor. */
+    val questionGenerator: HybridQuestionGenerator by lazy {
+        HybridQuestionGenerator(aiProvider, enabled = { prefs.current().aiQuestions })
+    }
 
     val courses by lazy { CourseRepositoryImpl(db) }
     val study by lazy { StudyRepositoryImpl(db) }

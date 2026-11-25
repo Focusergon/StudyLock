@@ -23,6 +23,14 @@ data class Prefs(
     val lastEmergencyAt: Long = 0L,
     val remindersEnabled: Boolean = true,
     val lastNotifiedAt: Long = 0L,
+    val autoSync: Boolean = true,
+    val autoSyncWifiOnly: Boolean = true,
+    val lastAutoSyncAt: Long = 0L,
+    val aiQuestions: Boolean = true,
+    val modelWifiOnly: Boolean = true,
+    val aiModelAccepted: Boolean = false,
+    val practiceQuestionsEnabled: Boolean = true,
+    val restrictedPermissionAcknowledged: Boolean = false,
 ) {
     val displayName: String get() = userName.ifBlank { "Estudiante" }
 }
@@ -40,6 +48,14 @@ class UserPreferences(private val context: Context) {
             lastEmergencyAt = p[Keys.LAST_EMERGENCY] ?: 0L,
             remindersEnabled = p[Keys.REMINDERS] ?: true,
             lastNotifiedAt = p[Keys.LAST_NOTIFIED] ?: 0L,
+            autoSync = p[Keys.AUTO_SYNC] ?: true,
+            autoSyncWifiOnly = p[Keys.AUTO_SYNC_WIFI] ?: true,
+            lastAutoSyncAt = p[Keys.LAST_AUTO_SYNC] ?: 0L,
+            aiQuestions = p[Keys.AI_QUESTIONS] ?: true,
+            modelWifiOnly = p[Keys.MODEL_WIFI] ?: true,
+            aiModelAccepted = p[Keys.AI_MODEL_ACCEPTED] ?: false,
+            practiceQuestionsEnabled = p[Keys.PRACTICE_QUESTIONS] ?: true,
+            restrictedPermissionAcknowledged = p[Keys.RESTRICTED_PERMISSION] ?: false,
         )
     }
 
@@ -57,6 +73,19 @@ class UserPreferences(private val context: Context) {
     suspend fun markEmergencyUsed(at: Long) = put { it[Keys.LAST_EMERGENCY] = at }
     suspend fun setRemindersEnabled(enabled: Boolean) = put { it[Keys.REMINDERS] = enabled }
     suspend fun markNotified(at: Long) = put { it[Keys.LAST_NOTIFIED] = at }
+    suspend fun setAutoSync(enabled: Boolean) = put { it[Keys.AUTO_SYNC] = enabled }
+    suspend fun setAutoSyncWifiOnly(enabled: Boolean) = put { it[Keys.AUTO_SYNC_WIFI] = enabled }
+    suspend fun markAutoSyncAttempt(at: Long) = put { it[Keys.LAST_AUTO_SYNC] = at }
+    suspend fun setAiQuestions(enabled: Boolean) = put { it[Keys.AI_QUESTIONS] = enabled }
+    suspend fun setModelWifiOnly(enabled: Boolean) = put { it[Keys.MODEL_WIFI] = enabled }
+    suspend fun setAiModelAccepted(accepted: Boolean) = put { it[Keys.AI_MODEL_ACCEPTED] = accepted }
+
+    /** Solo desactiva las 5 preguntas de prueba; los repasos y retos siguen igual. */
+    suspend fun setPracticeQuestionsEnabled(enabled: Boolean) = put { it[Keys.PRACTICE_QUESTIONS] = enabled }
+
+    /** Confirmación del paso "Permisos restringidos" (no detectable por API pública). */
+    suspend fun setRestrictedPermissionAcknowledged(acknowledged: Boolean) =
+        put { it[Keys.RESTRICTED_PERMISSION] = acknowledged }
 
     private suspend fun put(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.userDataStore.edit { prefs -> block(prefs) }
@@ -72,5 +101,13 @@ class UserPreferences(private val context: Context) {
         val LAST_EMERGENCY = longPreferencesKey("last_emergency_at")
         val REMINDERS = booleanPreferencesKey("reminders_enabled")
         val LAST_NOTIFIED = longPreferencesKey("last_notified_at")
+        val AUTO_SYNC = booleanPreferencesKey("auto_sync")
+        val AUTO_SYNC_WIFI = booleanPreferencesKey("auto_sync_wifi_only")
+        val LAST_AUTO_SYNC = longPreferencesKey("last_auto_sync_at")
+        val AI_QUESTIONS = booleanPreferencesKey("ai_questions")
+        val MODEL_WIFI = booleanPreferencesKey("model_wifi_only")
+        val AI_MODEL_ACCEPTED = booleanPreferencesKey("ai_model_accepted")
+        val PRACTICE_QUESTIONS = booleanPreferencesKey("practice_questions_enabled")
+        val RESTRICTED_PERMISSION = booleanPreferencesKey("restricted_permission_ack")
     }
 }

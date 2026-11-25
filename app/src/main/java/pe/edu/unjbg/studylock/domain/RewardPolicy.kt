@@ -39,12 +39,15 @@ object ReviewScheduler {
 object RewardPolicy {
 
     const val REVIEW_QUESTIONS = 5
+    const val PRACTICE_QUESTIONS = 5
     const val CHALLENGE_QUESTIONS = 2
     const val EMERGENCY_MINUTES = 2
     const val EMERGENCY_COOLDOWN_MINUTES = 20
 
     fun minutesFor(kind: SessionKind, questionCount: Int, correctCount: Int): Int = when (kind) {
-        SessionKind.REVIEW -> when {
+        // Las preguntas de prueba usan la misma tabla que un repaso de 5, pero su resultado
+        // no se registra en estadísticas (solo los minutos se acreditan como puntos).
+        SessionKind.REVIEW, SessionKind.PRUEBA -> when {
             questionCount == 0 -> 0
             correctCount * 100 / questionCount >= 80 -> 5
             correctCount * 100 / questionCount >= 50 -> 3
@@ -56,6 +59,9 @@ object RewardPolicy {
         }
         SessionKind.EMERGENCY -> EMERGENCY_MINUTES
     }
+
+    /** Las preguntas de prueba dan puntos, pero no entran en contadores ni rachas. */
+    fun countsForStats(kind: SessionKind): Boolean = kind != SessionKind.PRUEBA
 
     /** Tiempo de estudio estimado para las estadísticas (0.8 min por pregunta). */
     fun studyMinutes(questionCount: Int): Int = (questionCount * 0.8).toInt() + if (questionCount > 0) 1 else 0

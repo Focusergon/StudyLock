@@ -1,6 +1,7 @@
 package pe.edu.unjbg.studylock.domain.content
 
 import kotlin.random.Random
+import pe.edu.unjbg.studylock.domain.model.QuestionTier
 
 /** Pregunta generada automáticamente a partir de material académico. */
 data class GeneratedQuestion(
@@ -9,6 +10,11 @@ data class GeneratedQuestion(
     val correctIndex: Int,
     val explanation: String,
     val difficulty: Int = 1,
+    val tier: QuestionTier = QuestionTier.CONCEPTO,
+    /** Misma idea que otras preguntas; sirve para desbloquear procesos por aciertos. */
+    val conceptKey: String = "",
+    /** Fragmento literal del material que justifica la respuesta (solo lo genera la IA validada). */
+    val sourceQuote: String = "",
 )
 
 /** Tema detectado en un documento, con sus preguntas. */
@@ -65,12 +71,14 @@ object QuestionGenerator {
         if (sentences.isEmpty()) return emptyList()
         val vocab = vocabulary(sentences)
         val defs = definitions(sentences)
+        val key = conceptKey(topicName, vocab)
 
-        val questions = mutableListOf<GeneratedQuestion>()
-        questions += definitionQuestions(defs)
-        questions += sentences.mapNotNull { cloze(it, vocab, topicName) }
+        // Primero conceptos: el estudiante aprende el vocabulario antes de razonar sobre flujos.
+        val concepts = definitionQuestions(defs, key) + sentences.mapNotNull { cloze(it, vocab, topicName, key) }
+        // Después procesos: listas numeradas y conectores que explican cómo funciona algo.
+        val processes = processQuestions(text, key)
 
-        return questions
+        return (concepts + processes)
             .distinctBy { it.prompt.lowercase() }
             .take(maxQuestions)
     }
@@ -86,7 +94,7 @@ object QuestionGenerator {
         maxTopics: Int = 6,
         questionsPerTopic: Int = 8,
     ): List<GeneratedTopic> {
-        val sections = sections(text).take(maxTopics)
+        val sections = splitTopics(text, maxTopics)
         val topics = sections.mapNotNull { (title, body) ->
             val questions = generate(body, title, questionsPerTopic)
             if (questions.size < 2) null else GeneratedTopic(title.ifBlank { DEFAULT_TOPIC }, questions)
@@ -95,6 +103,10 @@ object QuestionGenerator {
         val fallback = generate(text, DEFAULT_TOPIC, questionsPerTopic * 2)
         return if (fallback.isEmpty()) emptyList() else listOf(GeneratedTopic(DEFAULT_TOPIC, fallback))
     }
+
+    /** Temas detectados como pares (título, texto), sin generar preguntas todavía. */
+    fun splitTopics(text: String, maxTopics: Int = 6): List<Pair<String, String>> =
+        sections(text).take(maxTopics)
 
     // --- Extracción ---------------------------------------------------------
 
@@ -132,7 +144,12 @@ object QuestionGenerator {
 
     // --- Generadores --------------------------------------------------------
 
-    private fun cloze(sentence: String, vocab: List<String>, topicName: String): GeneratedQuestion? {
+    private fun cloze(
+        sentence: String,
+        vocab: List<String>,
+        topicName: String,
+        conceptKey: String,
+    ): GeneratedQuestion? {
         val words = WORD.findAll(sentence).map { it.value }.toList()
         val key = words
             .filter { it.length >= 6 && it.lowercase() !in STOPWORDS }
@@ -154,10 +171,18 @@ object QuestionGenerator {
         }).distinctBy { it.lowercase() }.take(3)
 
         if (distractors.size < 3) return null
-        return build(prompt, key, distractors, topicName, "La palabra que completa la idea es «$key».")
+        return build(
+            prompt = prompt,
+            correct = key,
+            distractors = distractors,
+            topicName = topicName,
+            explanation = "La palabra que completa la idea es «$key».",
+            tier = QuestionTier.CONCEPTO,
+            conceptKey = conceptKey,
+        )
     }
 
-    private fun definitionQuestions(defs: List<Def>): List<GeneratedQuestion> {
+    private fun definitionQuestions(defs: List<Def>, conceptKey: String): List<GeneratedQuestion> {
         if (defs.size < 4) return emptyList()
         return defs.mapNotNull { def ->
             val distractors = defs.asSequence()
@@ -169,7 +194,15 @@ object QuestionGenerator {
                 .toList()
             if (distractors.size < 3) return@mapNotNull null
             val prompt = "Según el material, ¿qué se afirma sobre «${def.subject}»?"
-            build(prompt, def.predicate, distractors, "", "«${def.subject}» ${def.predicate}.")
+            build(
+                prompt = prompt,
+                correct = def.predicate,
+                distractors = distractors,
+                topicName = "",
+                explanation = "«${def.subject}» ${def.predicate}.",
+                tier = QuestionTier.CONCEPTO,
+                conceptKey = conceptKey,
+            )
         }
     }
 
@@ -179,6 +212,9 @@ object QuestionGenerator {
         distractors: List<String>,
         topicName: String,
         explanation: String,
+        tier: QuestionTier,
+        conceptKey: String,
+        difficulty: Int = if (prompt.contains("_____")) 1 else 2,
     ): GeneratedQuestion? {
         val options = (listOf(correct) + distractors).distinctBy { it.lowercase() }
         if (options.size < 4) return null
@@ -191,8 +227,77 @@ object QuestionGenerator {
             options = shuffled,
             correctIndex = correctIndex,
             explanation = full,
-            difficulty = if (prompt.contains("_____")) 1 else 2,
+            difficulty = difficulty,
+            tier = tier,
+            conceptKey = conceptKey,
         )
+    }
+
+    private fun conceptKey(topicName: String, vocab: List<String>): String {
+        val base = topicName.ifBlank { vocab.firstOrNull().orEmpty() }
+        return base.lowercase()
+            .replace(Regex("[^a-z0-9áéíóúüñ ]"), " ")
+            .trim()
+            .replace(Regex("\\s+"), "-")
+            .take(48)
+            .ifBlank { "concepto" }
+    }
+
+    /**
+     * Preguntas de proceso a partir de listas numeradas/viñetas y conectores de secuencia.
+     * No inventa pasos: solo usa fragmentos literales del material.
+     */
+    private fun processQuestions(text: String, conceptKey: String): List<GeneratedQuestion> {
+        val lines = text.replace('\u00A0', ' ').lines().map { it.trim() }
+        val steps = lines.mapNotNull { line ->
+            val withoutMarker = NUMBERED.replace(line, "").trimStart('•', '-', '*').trim()
+            withoutMarker.takeIf { it.length in 18..160 && it.count(Char::isLetter) >= 12 }
+        }.distinctBy { it.lowercase() }
+
+        if (steps.size < 3) return emptyList()
+        val picked = steps.take(6)
+        val questions = mutableListOf<GeneratedQuestion>()
+
+        // ¿Qué viene después de un paso? Se pregunta por los pasos 1..n-1.
+        for (index in 0 until picked.size - 1) {
+            val correctStep = picked[index + 1]
+            val distractors = picked.filterNot { it.equals(correctStep, ignoreCase = true) }
+                .filterNot { it.equals(picked[index], ignoreCase = true) }
+                .shuffled(Random((conceptKey + index).hashCode()))
+                .take(3)
+            if (distractors.size < 3) continue
+            questions += build(
+                prompt = "Según el material, ¿qué sucede después de: «${picked[index]}»?",
+                correct = correctStep,
+                distractors = distractors,
+                topicName = "",
+                explanation = "El material continúa con: «$correctStep».",
+                tier = QuestionTier.PROCESO,
+                conceptKey = conceptKey,
+                difficulty = 3,
+            ) ?: continue
+        }
+
+        // Orden completo, cuando hay entre 3 y 5 pasos (no caben más en una opción legible).
+        if (picked.size in 3..5) {
+            val correct = picked.joinToString(" → ")
+            val reversed = picked.reversed().joinToString(" → ")
+            val rotated = picked.drop(1) + picked.first()
+            val rotatedText = rotated.joinToString(" → ")
+            val shifted = picked.dropLast(1).reversed() + picked.last()
+            val shiftedText = shifted.joinToString(" → ")
+            build(
+                prompt = "¿Cuál es el orden correcto del proceso descrito en el material?",
+                correct = correct,
+                distractors = listOf(reversed, rotatedText, shiftedText),
+                topicName = "",
+                explanation = "El material presenta los pasos en este orden: $correct.",
+                tier = QuestionTier.PROCESO,
+                conceptKey = conceptKey,
+                difficulty = 3,
+            )?.let { questions += it }
+        }
+        return questions
     }
 
     private fun replaceFirstWord(text: String, word: String, replacement: () -> String): String {

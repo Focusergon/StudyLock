@@ -5,15 +5,21 @@ agotan los minutos disponibles, abrir una app limitada (TikTok, Instagram, YouTu
 muestra un **reto rápido de 2 preguntas**. Resolverlo otorga minutos de acceso temporales que
 se descuentan solo mientras usas esa app.
 
-> Estado: **versión inicial completa y escalable**. Incluye el bucle de bloqueo, generación de
-> preguntas on-device a partir de tu propio material, vinculación de **Cuentas UNJBG** (Aula
-> Virtual e Intranet) con un mini-navegador que inicia sesión y arma el árbol de cursos y archivos,
-> horario de clases con recordatorios inteligentes e historial de minutos y rachas.
-> El generador puede sustituirse por un modelo de IA más potente sin tocar la UI.
+> Estado: **iteración actual completa y escalable**. Incluye el bucle de bloqueo, generación de
+> preguntas a partir de tu propio material (modelo local opcional + respaldo determinista),
+> vinculación de **Cuentas UNJBG** (Aula Virtual e Intranet) con un mini-navegador visible,
+> sincronización automática diaria, horario con recordatorios e historial de minutos y rachas.
+> No hay cursos de demostración: si no se detecta contenido, la app lo dice y muestra los enlaces vistos.
 
 > **¿Solo quieres instalarla en tu celular?** Sigue la guía paso a paso:
 > **[docs/INSTALACION.md](docs/INSTALACION.md)** (requisitos, instalación y solución de errores
 > como «App no instalada» o «configuración restringida» de accesibilidad en Android 13+).
+
+> **Beta actual: `v0.3.0-beta.1` (APK firmado, `versionCode 3`).** Se instala directamente sobre
+> `v0.2.0` sin desinstalar y conserva cursos, minutos y preferencias. Es una versión de prueba:
+> añade 5 preguntas de prueba, permiso «Permisos restringidos» como primer paso, el apartado
+> «Usar generador de preguntas local» y corrige la edición de apps limitadas. El asset del modelo
+> local (`model-gemma3-270m`) aún debe publicarse para que el botón de descarga funcione.
 
 ---
 
@@ -36,13 +42,17 @@ se descuentan solo mientras usas esa app.
 ### Estudio y analítica
 - Onboarding: bienvenida, vinculación de cuenta UNJBG, activación de permisos con estado en
   vivo, selección de apps instaladas.
-- Inicio: saldo de minutos, acceso activo, estadísticas del día, siguiente tema recomendado,
-  gráfico semanal, apps limitadas.
+- Inicio: saldo de minutos, **5 preguntas de prueba** (minutos extra, sin estadísticas), acceso
+  activo, estadísticas del día, siguiente tema recomendado, gráfico semanal, apps limitadas.
 - Mis cursos + detalle por curso con dominio y estado por tema
   (**Aprendido / Necesita repaso / Pendiente**).
 - Sesión de repaso adaptativo de 5 preguntas con retroalimentación y explicación.
-- Progreso: minutos, sesiones, preguntas, aciertos, racha y dominio por curso.
-- Ajustes: permisos del sistema, meta diaria, recordatorios, emergencia, privacidad y reinicio
+- **5 preguntas de prueba**: se ofrecen desde el inicio con material importado real; se categorizan
+  como `PRUEBA`, dan 5/3/2 minutos como un repaso, pero **no cuentan** en preguntas, sesiones,
+  precisión ni rachas. Se pueden desactivar en Ajustes sin afectar a los demás repasos.
+- Progreso: minutos, sesiones, preguntas, aciertos, racha y dominio por curso (sin sesiones `PRUEBA`).
+- Ajustes: permisos del sistema (**Permisos restringidos** primero), meta diaria, recordatorios,
+  emergencia, preguntas de prueba, **Usar generador de preguntas local**, privacidad y reinicio
   del onboarding.
 - Repetición espaciada tipo SM-2 simplificada (`ReviewScheduler`) y priorización de temas
   débiles (`Topic.priority`).
@@ -53,9 +63,28 @@ se descuentan solo mientras usas esa app.
   reutilizar la del Aula). Un **mini-navegador visible** inicia sesión como lo haría una persona y
   **recorre** las páginas para descubrir cursos → secciones → archivos, sin depender de endpoints
   concretos. De ahí sale un **árbol** con selección por archivo y la generación de preguntas.
+- **Sincronización automática**: al abrir la app, como máximo una vez cada 24 h y solo si hay
+  credenciales guardadas. Por defecto solo por Wi-Fi; se puede desactivar en Ajustes. El avance se
+  muestra en el mismo mini-navegador visible.
 - **Texto pegado** o **archivo `.txt`/`.md`/`.pdf`** (extractor de PDF propio, sin dependencias).
-- `QuestionGenerator` detecta temas (encabezados) y crea preguntas de completar y de definición
-  con distractores sacados del propio material. Es determinista y se ejecuta en el dispositivo.
+- `QuestionGenerator` (respaldo determinista) detecta temas y crea preguntas de completar,
+  definición y procesos con distractores sacados del propio material.
+- `HybridQuestionGenerator` intenta primero con **Gemma 3 270M local** (LiteRT-LM, CPU) y, si el
+  modelo no está descargado, desactivado o incumple las reglas, cae al respaldo sin interrumpir.
+- El modelo se descarga **una sola vez** desde un GitHub Release, se verifica por SHA-256 y no
+  necesita clave de API ni envía tu material a ningún servidor.
+- `AiQuestionValidator` exige JSON estricto, 4 opciones únicas, índice correcto válido,
+  explicación no vacía y una **cita literal del material**; si algo falla, se descarta.
+- Los PDFs originales se copian físicamente a `unjbg/cursos/<curso>/<sección>/…` o
+  `unjbg/agregados/…`, con `manifest.json` y control incremental por URL + tamaño/huella.
+- Los sílabos de la Intranet se fusionan con el curso del Aula por coincidencia de nombre; sin
+  coincidencia se guardan en `Agregados` con aviso, nunca se inventa un curso.
+- Los archivos subidos se copian físicamente, se etiquetan con chips (se puede crear una categoría)
+  y se les sugiere curso por similitud **con confirmación**.
+- Guía interactiva local de 4 pasos y 3 preguntas: no registra minutos ni estadísticas.
+- El bloqueo recarga la selección de apps al guardar, al reconectar accesibilidad y al arrancar;
+  editar la lista reemplaza por completo la anterior, así las apps recién marcadas se bloquean
+  también después de horas o de un reinicio del proceso.
 - Vista previa antes de guardar e **historial de importaciones** con eliminación.
 - Reimportar un curso con el mismo nombre lo **reemplaza** en vez de duplicarlo.
 
@@ -74,6 +103,7 @@ se descuentan solo mientras usas esa app.
 | Sesión | Preguntas | Minutos |
 |---|---|---|
 | Repaso | 5 | 5 si ≥80 % de acierto, 3 si ≥50 %, 2 si menos |
+| **Preguntas de prueba** | 5 | Igual que repaso; solo suman puntos, no estadísticas |
 | Reto rápido | 2 | 5 con ambos aciertos, 3 en caso contrario |
 | Emergencia | — | 2 (cooldown 20 min) |
 
@@ -134,10 +164,14 @@ existe, la build de release sigue funcionando pero genera un APK sin firmar
 > **Importante**: si pierdes el keystore o su contraseña no podrás publicar actualizaciones de
 > la app con la misma identidad. Respalda `studylock-release.jks` y la contraseña.
 
+La distribución se hace publicando el APK firmado en GitHub Releases. El modelo local se publica
+en el Release separado `model-gemma3-270m`; su binario no se versiona en el repositorio.
+
 ### Stack
 - Kotlin + Jetpack Compose (Material 3), `minSdk 26`, `compileSdk/targetSdk 37`.
 - AGP **9.5.1** con **Kotlin integrado** (no se aplica `org.jetbrains.kotlin.android`).
 - Navigation Compose, DataStore Preferences, WorkManager, `material-icons-extended`.
+- **LiteRT-LM 0.16.1** (modelo local en CPU) y Gson para el validador estricto de JSON.
 - **SQLite directo** (`SQLiteOpenHelper`) detrás de interfaces de repositorio. No hay KSP/Room
   porque KSP todavía no es compatible con el Kotlin integrado de AGP 9. Migrar a Room es un
   cambio contenido a `data/` (las features solo ven las interfaces de `domain/repo`).
@@ -155,15 +189,17 @@ app/src/main/java/pe/edu/unjbg/studylock/
 │   ├── text/                    # Extractor de texto de PDF (Kotlin puro)
 │   └── util/                    # Tiempo, permisos, carga de apps instaladas
 ├── data/
+│   ├── ai/                      # Descarga verificada del modelo y proveedor LiteRT-LM
 │   ├── auth/                    # Credenciales UNJBG cifradas (Android Keystore + DataStore)
 │   ├── web/                     # Mini-navegador (WebView), extractores y descarga de archivos
+│   ├── content/                 # Copias físicas, manifest.json y rutas cursos/agregados
+│   ├── network/                 # Comprobación de Wi-Fi para sync y descarga del modelo
 │   ├── local/                   # SQLiteOpenHelper, esquema, helpers de Cursor
 │   ├── prefs/                   # DataStore (perfil/metas) y AccessStore (tiempo real)
-│   ├── repos/                   # Implementaciones de repositorios
-│   └── seed/                    # Contenido académico de demostración
+│   └── repos/                   # Implementaciones de repositorios
 ├── di/AppGraph.kt               # Contenedor manual (único por proceso)
 ├── domain/
-│   ├── content/                 # Generador de preguntas a partir de texto
+│   ├── content/                 # Generador híbrido, validador IA, fusión de sílabos y sugerencias
 │   ├── model/                   # Course, Topic, Question, MinuteTx, ClassBlock, History…
 │   ├── repo/                    # Interfaces (contratos)
 │   ├── HistoryStats.kt          # Rachas y días activos (puro, testeable)
@@ -181,6 +217,7 @@ app/src/main/java/pe/edu/unjbg/studylock/
 │   ├── onboarding/ home/ courses/ session/ progress/ settings/
 │   ├── accounts/                # Cuentas UNJBG: credenciales, árbol de contenido y generación
 │   ├── import/                  # Importación manual (texto pegado, archivo .txt/.md/.pdf)
+│   ├── guide/                   # Guía local de 4 pasos (sin minutos ni estadísticas)
 │   ├── schedule/                # Horario de clases y franjas libres
 │   ├── access/                  # Pantalla de acceso temporal activo
 │   └── blocking/                # UI y ViewModel del reto
@@ -198,10 +235,11 @@ app/src/main/java/pe/edu/unjbg/studylock/
 - **Conector UNJBG**: `AulaExtractor` / `IntranetExtractor` (sobre `UnjbgWebSession`, un `WebView`
   real) ya descubren cursos, sílabos y documentos recorriendo la web. El login lo hacen con las
   credenciales cifradas de `CredentialStore`; no hay endpoints fijos que mantener.
-- **Generador de preguntas**: `QuestionGenerator` (on-device) llena `questions` y `options`.
-  Reemplazarlo por un LLM es cambiar la implementación de `ContentRepository`, sin tocar la UI.
-- **Backend**: sincronización opcional de progreso; el ledger local sigue siendo la verdad en
-  el dispositivo.
+- **Usar generador de preguntas local**: desde Ajustes se descarga el modelo y se organiza su uso;
+  `HybridQuestionGenerator` combina el modelo local con `QuestionGenerator`. `QuestionAiProvider`
+  permite sustituir LiteRT sin tocar la UI.
+- **Modelo**: `AiModel.DOWNLOAD_URL` apunta a un GitHub Release; el binario no se versiona.
+- **Backend**: no hay backend propio. El ledger local sigue siendo la verdad en el dispositivo.
 - **Hilt**: reemplazar `AppGraph` por módulos, manteniendo constructores por interfaz.
 
 ---
@@ -211,6 +249,10 @@ app/src/main/java/pe/edu/unjbg/studylock/
 En el onboarding la app muestra el estado en vivo de cada permiso. También puedes abrirlos
 desde **Ajustes → Permisos del sistema**.
 
+0. **Permisos restringidos** (paso previo, primero): en Android 13+ con instalación por APK abre
+   *Información de la app → menú ⋮ → Permitir permisos restringidos*. Sin esto, algunos dispositivos
+   no dejan activar los permisos siguientes. No es detectable por API pública: se confirma con el
+   interruptor «Ya lo activé».
 1. **Acceso al uso de aplicaciones** (`PACKAGE_USAGE_STATS`): detector de respaldo.
 2. **Superposición sobre otras apps** (`SYSTEM_ALERT_WINDOW`): permite mostrar el reto.
 3. **Servicio de accesibilidad**: detección principal por eventos de ventana.
@@ -239,8 +281,10 @@ desde **Ajustes → Permisos del sistema**.
   guardan **cifradas** con AES-256-GCM y una clave del **Android Keystore** (que nunca sale del
   dispositivo); la contraseña de la Intranet puede reutilizar la del Aula («misma contraseña»).
 - La app pide `INTERNET` para abrir las páginas oficiales de la UNJBG en el mini-navegador y para
-  descargar el material elegido. Las credenciales solo se escriben en esas páginas; el contenido se
-  procesa en el dispositivo y no se envía a ningún servidor.
+  descargar el material elegido y el modelo local. Las credenciales solo se escriben en esas
+  páginas; el contenido se procesa en el dispositivo y no se envía a ningún servidor.
+- El modelo Gemma 3 270M se descarga de un Release público (~290 MB), se comprueba con el SHA-256
+  fijado en `AiModel` y se guarda en almacenamiento privado. La app no puede crear API keys.
 - El servicio de accesibilidad solo recibe el nombre del paquete en primer plano; no inspecciona
   nodos ni contenido de otras apps.
 - `allowBackup=false` y reglas de extracción excluyen bases de datos y preferencias.
@@ -258,7 +302,10 @@ para la comunidad UNJBG. `isAccessibilityTool="false"` está declarado en la con
 
 - La extracción de PDF es **best-effort**: funciona con PDFs de texto (Word/LaTeX), no con
   escaneados ni fuentes CID (requerirían OCR).
-- El generador de preguntas es determinista y local; la calidad mejora al sustituirlo por un LLM.
+- El generador determinista es el respaldo; la IA local solo se usa si el modelo fue descargado y
+  sus respuestas pasan todas las validaciones. Su calidad todavía no se ha probado en un dispositivo real.
+- El Release `model-gemma3-270m` debe publicarse con el archivo `gemma3-270m-it-q8.litertlm` para
+  que el botón «Aceptar y descargar modelo» funcione. El binario no se incluye en el repositorio.
 - El descubrimiento de contenido es **heurístico** (recorre enlaces del mismo sitio que parecen
   secciones): si el campus cambia de estructura pueden aparecer menos archivos; hay respaldo de
   inicio de sesión manual en la propia ventana si la web pide intervención.
@@ -270,18 +317,20 @@ para la comunidad UNJBG. `isAccessibilityTool="false"` está declarado en la con
   del APK conviene revisar en Ajustes que siga activo.
 - La lista de apps conocidas para preselección es estática; se puede ampliar en
   `InstalledAppsLoader.knownCategories`.
-- Hay 62 tests JVM de la lógica pura (`RewardPolicy`, `ReviewScheduler`, `TimeUtils`,
-  `QuestionGenerator`, `PdfTextExtractor`, `SmartReminder`, `HistoryStats`, franjas libres,
-  clasificador de enlaces y scripts del mini-navegador), pero todavía no hay tests instrumentados de
-  UI ni pruebas en dispositivos reales.
+- Hay 98 tests JVM de la lógica pura (`RewardPolicy`, `PermissionStatus`, `ReviewScheduler`,
+  `TimeUtils`, `QuestionGenerator`, `QuestionProgression`, `ContentMerger`, `CourseSuggester`,
+  `AiQuestionValidator`, `HybridQuestionGenerator`, `PdfTextExtractor`, `SmartReminder`,
+  `HistoryStats`, franjas libres, clasificador de enlaces y scripts del mini-navegador), pero todavía
+  no hay tests instrumentados de UI ni pruebas en dispositivos reales (login UNJBG, WebView,
+  descarga/carga del modelo e inferencia).
 
 ---
 
 ## 7. Roadmap sugerido
 
 1. **SSO institucional** para el Aula Virtual e Intranet (hoy se guarda la contraseña cifrada).
-2. **Generador con IA** (backend o modelo on-device) para preguntas de mayor calidad, con
-   validación docente.
+2. **Validación docente y ajuste del prompt** del modelo local; publicar el Release del binario y
+   probar inferencia en dispositivos reales.
 3. **Importar horario** desde el Aula Virtual o un archivo `.ics` (hoy se registra a mano).
 4. **Sesiones ultra-cortas proactivas**: sugerir 1–2 preguntas al desbloquear el teléfono.
 5. Widget/Quick Settings para consultar saldo sin abrir la app.
@@ -403,7 +452,7 @@ sequenceDiagram
 flowchart LR
     Sources["Cuentas UNJBG (Aula/Intranet) · texto · archivo"] --> AccountsVM["AccountsViewModel / ImportViewModel"]
     AccountsVM --> Extract["Mini-navegador inicia sesión y extrae texto"]
-    Extract --> Generate["QuestionGenerator crea preguntas"]
+    Extract --> Generate["HybridQuestionGenerator (IA local + respaldo) crea preguntas"]
     Generate --> ContentRepo["ContentRepositoryImpl"]
     ContentRepo --> DB[("SQLite: cursos, temas, preguntas y opciones")]
 

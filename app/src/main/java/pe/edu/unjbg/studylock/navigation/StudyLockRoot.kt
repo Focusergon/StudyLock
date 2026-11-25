@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -28,6 +29,7 @@ import pe.edu.unjbg.studylock.feature.courses.CoursesScreen
 import pe.edu.unjbg.studylock.feature.courses.CoursesViewModel
 import pe.edu.unjbg.studylock.feature.home.HomeScreen
 import pe.edu.unjbg.studylock.feature.home.HomeViewModel
+import pe.edu.unjbg.studylock.feature.guide.GuideScreen
 import pe.edu.unjbg.studylock.feature.import.ImportScreen
 import pe.edu.unjbg.studylock.feature.import.ImportViewModel
 import pe.edu.unjbg.studylock.feature.onboarding.AppSelectionScreen
@@ -51,6 +53,20 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val showBar = currentRoute in Routes.tabRoutes
+
+    // Auto-sync: una vez al día al abrir, con credenciales guardadas y (por defecto) solo Wi-Fi.
+    // Se marca el intento antes de navegar para no repetirlo en cada recomposición.
+    LaunchedEffect(Unit) {
+        if (startOnboarding) return@LaunchedEffect
+        val current = graph.prefs.current()
+        if (!current.autoSync) return@LaunchedEffect
+        if (current.autoSyncWifiOnly && !graph.network.isWifi()) return@LaunchedEffect
+        if (!graph.credentials.current().hasAula) return@LaunchedEffect
+        val now = System.currentTimeMillis()
+        if (now - current.lastAutoSyncAt < 24L * 60 * 60 * 1_000) return@LaunchedEffect
+        graph.prefs.markAutoSyncAttempt(now)
+        nav.navigate(Routes.ACCOUNTS_AUTO)
+    }
 
     fun navigateTab(target: String) {
         nav.navigate(target) {
@@ -106,7 +122,11 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
             }
 
             composable(Routes.PERMISSIONS) {
+                val vm: OnboardingViewModel = viewModel(
+                    factory = viewModelFactory { OnboardingViewModel(graph.prefs, graph.blockedApps) },
+                )
                 PermissionsScreen(
+                    viewModel = vm,
                     onBack = { nav.popBackStack() },
                     onContinue = { nav.navigate(Routes.APPS) },
                 )
@@ -120,6 +140,7 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                     viewModel = vm,
                     onBack = { nav.popBackStack() },
                     onDone = {
+                        graph.gate.refreshBlockedPackages()
                         nav.navigate(Routes.HOME) {
                             popUpTo(Routes.WELCOME) { inclusive = true }
                             launchSingleTop = true
@@ -130,15 +151,18 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
 
             composable(Routes.HOME) {
                 val vm: HomeViewModel = viewModel(
-                    factory = viewModelFactory { HomeViewModel(graph.stats, graph.prefs) },
+                    factory = viewModelFactory { HomeViewModel(graph.stats, graph.prefs, graph.study) },
                 )
                 val ui by vm.ui.collectAsStateWithLifecycle()
                 HomeScreen(
                     ui = ui,
                     onStartReview = { courseId -> nav.navigate(Routes.session(courseId)) },
+                    onStartPractice = { nav.navigate(Routes.PRACTICE) },
+                    onImportContent = { nav.navigate(Routes.IMPORT) },
                     onOpenAccess = { nav.navigate(Routes.ACCESS_ACTIVE) },
                     onBrowseCourses = { navigateTab(Routes.COURSES) },
                     onBlockedApps = { nav.navigate(Routes.BLOCKED_APPS) },
+                    onOpenGuide = { nav.navigate(Routes.GUIDE) },
                 )
             }
 
@@ -152,13 +176,20 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                     onOpenCourse = { courseId -> nav.navigate(Routes.courseDetail(courseId)) },
                     onQuickReview = { nav.navigate(Routes.session(Routes.WEAK)) },
                     onImport = { nav.navigate(Routes.IMPORT) },
+                    onOpenGuide = { nav.navigate(Routes.GUIDE) },
                 )
+            }
+
+            composable(Routes.GUIDE) {
+                GuideScreen(onBack = { nav.popBackStack() })
             }
 
             composable(Routes.IMPORT) {
                 val context = LocalContext.current.applicationContext
                 val vm: ImportViewModel = viewModel(
-                    factory = viewModelFactory { ImportViewModel(context, graph.content) },
+                    factory = viewModelFactory {
+                        ImportViewModel(context, graph.content, graph.courses, graph.contentStore, graph.questionGenerator)
+                    },
                 )
                 ImportScreen(
                     viewModel = vm,
@@ -168,10 +199,15 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
             }
 
             composable(Routes.ACCOUNTS) {
-                val vm: AccountsViewModel = viewModel(
-                    factory = viewModelFactory { AccountsViewModel(graph.credentials, graph.content) },
+                AccountsDestination(graph, nav, autoSync = false)
+            }
+
+            composable(Routes.ACCOUNTS_AUTO) {
+                AccountsDestination(
+                    graph,
+                    nav,
+                    autoSync = it.arguments?.getString("autoSync")?.toBoolean() == true,
                 )
-                AccountsScreen(viewModel = vm, onBack = { nav.popBackStack() })
             }
 
             composable(Routes.SCHEDULE) {
@@ -188,8 +224,18 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                 AppSelectionScreen(
                     viewModel = vm,
                     onBack = { nav.popBackStack() },
-                    onDone = { nav.popBackStack() },
+                    onDone = {
+                        graph.gate.refreshBlockedPackages()
+                        nav.popBackStack()
+                    },
                 )
+            }
+
+            composable(Routes.PRACTICE) {
+                val vm: StudyViewModel = viewModel(
+                    factory = viewModelFactory { StudyViewModel(graph, Routes.PRACTICE) },
+                )
+                SessionScreen(viewModel = vm, onDone = { goHome() })
             }
 
             composable(Routes.COURSE_DETAIL) {
@@ -223,7 +269,7 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
 
             composable(Routes.SETTINGS) {
                 val vm: SettingsViewModel = viewModel(
-                    factory = viewModelFactory { SettingsViewModel(graph.prefs) },
+                    factory = viewModelFactory { SettingsViewModel(graph.prefs, graph.modelDownloader) },
                 )
                 SettingsScreen(
                     viewModel = vm,
@@ -245,6 +291,22 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
             }
         }
     }
+}
+
+@Composable
+private fun AccountsDestination(graph: AppGraph, nav: NavHostController, autoSync: Boolean) {
+    val vm: AccountsViewModel = viewModel(
+        factory = viewModelFactory {
+            AccountsViewModel(
+                credentials = graph.credentials,
+                content = graph.content,
+                store = graph.contentStore,
+                generator = graph.questionGenerator,
+                autoSync = autoSync,
+            )
+        },
+    )
+    AccountsScreen(viewModel = vm, onBack = { nav.popBackStack() })
 }
 
 @Composable

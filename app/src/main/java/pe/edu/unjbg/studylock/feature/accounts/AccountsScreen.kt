@@ -99,6 +99,10 @@ fun AccountsScreen(viewModel: AccountsViewModel, onBack: () -> Unit) {
                 item { ResultBanner(message = message, onClose = viewModel::dismissResult) }
             }
 
+            ui.notices.forEach { notice ->
+                item { NoticeCard(message = notice) }
+            }
+
             item {
                 Spacer(Modifier.height(2.dp))
                 SlSectionLabel("Aula Virtual UNJBG")
@@ -108,6 +112,51 @@ fun AccountsScreen(viewModel: AccountsViewModel, onBack: () -> Unit) {
             item {
                 Spacer(Modifier.height(2.dp))
                 SlSectionLabel("Árbol de contenido")
+            }
+
+            if (ui.detectedLinks.isNotEmpty() && !ui.syncing) {
+                item {
+                    SlCard(color = SlColors.ChipBlue, border = false) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "El navegador vio ${ui.detectedLinks.size} enlace(s).",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = SlColors.Ink,
+                                )
+                                Text(
+                                    text = "Si no apareció el contenido, revisa qué se detectó. La app no inventa cursos.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = SlColors.Muted,
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            SlTextButton(
+                                text = if (ui.showLinks) "Ocultar" else "Ver enlaces detectados",
+                                onClick = viewModel::toggleLinks,
+                                color = SlColors.Primary,
+                            )
+                        }
+                        if (ui.showLinks) {
+                            Spacer(Modifier.height(10.dp))
+                            ui.detectedLinks.take(60).forEach { link ->
+                                Text(
+                                    text = "[${link.kind}] ${link.text.ifBlank { "(sin texto)" }}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = SlColors.Ink,
+                                )
+                                Text(
+                                    text = link.href,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = SlColors.Muted,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Spacer(Modifier.height(6.dp))
+                            }
+                        }
+                    }
+                }
             }
 
             if (!ui.hasTree) {
@@ -436,6 +485,22 @@ private fun BannerCard(message: String, onClose: () -> Unit) {
         Text(message, style = MaterialTheme.typography.bodySmall, color = SlColors.Danger)
         Spacer(Modifier.height(6.dp))
         SlTextButton(text = "Cerrar", onClick = onClose, color = SlColors.Danger)
+    }
+}
+
+@Composable
+private fun NoticeCard(message: String) {
+    SlCard(color = SlColors.Surface) {
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(
+                Icons.Filled.Description,
+                contentDescription = null,
+                tint = SlColors.Primary,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(message, style = MaterialTheme.typography.bodySmall, color = SlColors.Ink)
+        }
     }
 }
 

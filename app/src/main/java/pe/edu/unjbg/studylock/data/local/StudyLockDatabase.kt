@@ -6,7 +6,6 @@ import android.database.sqlite.SQLiteOpenHelper
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import pe.edu.unjbg.studylock.data.seed.SeedContent
 
 /**
  * Persistencia local del MVP.
@@ -43,19 +42,45 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
 
     override fun onCreate(db: SQLiteDatabase) {
         SCHEMA.forEach(db::execSQL)
-        SeedContent.populate(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Migración aditiva: el esquema usa CREATE … IF NOT EXISTS, así que aplicarlo sobre una
-        // base existente solo crea lo que falte (por ejemplo, las tablas de horario e importación)
-        // sin borrar el progreso del estudiante.
+        // El esquema usa CREATE … IF NOT EXISTS: aplicarlo sobre una base existente solo crea lo
+        // que falte y conserva el progreso del estudiante.
         SCHEMA.forEach(db::execSQL)
+        if (oldVersion < 3) migrateToV3(db)
+    }
+
+    /**
+     * v3: progresión por pregunta (tier + estadísticas) y borrado de los cursos de ejemplo.
+     * No se tocan respuestas reales ni minutos: solo se retira el contenido inventado.
+     */
+    private fun migrateToV3(db: SQLiteDatabase) {
+        db.execSQL("ALTER TABLE questions ADD COLUMN tier TEXT NOT NULL DEFAULT 'CONCEPTO'")
+        db.execSQL("ALTER TABLE questions ADD COLUMN concept_key TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE questions ADD COLUMN times_asked INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE questions ADD COLUMN times_correct INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE questions ADD COLUMN correct_streak INTEGER NOT NULL DEFAULT 0")
+
+        val seededIds = arrayOf<Any?>("db", "isw", "redes")
+        val placeholders = "?,?,?"
+        db.execSQL(
+            "DELETE FROM options WHERE question_id IN (" +
+                "SELECT q.id FROM questions q JOIN topics t ON t.id = q.topic_id " +
+                "WHERE t.course_id IN ($placeholders))",
+            seededIds,
+        )
+        db.execSQL(
+            "DELETE FROM questions WHERE topic_id IN (SELECT id FROM topics WHERE course_id IN ($placeholders))",
+            seededIds,
+        )
+        db.execSQL("DELETE FROM topics WHERE course_id IN ($placeholders)", seededIds)
+        db.execSQL("DELETE FROM courses WHERE id IN ($placeholders)", seededIds)
     }
 
     companion object {
         private const val NAME = "studylock.db"
-        private const val VERSION = 2
+        private const val VERSION = 3
 
         private val SCHEMA = listOf(
             """
@@ -89,7 +114,12 @@ class StudyLockDatabase(context: Context) : SQLiteOpenHelper(
                 prompt TEXT NOT NULL,
                 explanation TEXT NOT NULL DEFAULT '',
                 difficulty INTEGER NOT NULL DEFAULT 1,
-                sort INTEGER NOT NULL DEFAULT 0
+                sort INTEGER NOT NULL DEFAULT 0,
+                tier TEXT NOT NULL DEFAULT 'CONCEPTO',
+                concept_key TEXT NOT NULL DEFAULT '',
+                times_asked INTEGER NOT NULL DEFAULT 0,
+                times_correct INTEGER NOT NULL DEFAULT 0,
+                correct_streak INTEGER NOT NULL DEFAULT 0
             )
             """.trimIndent(),
             """

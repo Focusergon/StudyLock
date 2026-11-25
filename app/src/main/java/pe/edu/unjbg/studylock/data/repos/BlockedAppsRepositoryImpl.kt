@@ -26,6 +26,10 @@ class BlockedAppsRepositoryImpl(
         db.writableDatabase.apply {
             beginTransaction()
             try {
+                // La selección es autoritativa: primero se limpia la tabla y luego se inserta
+                // todo lo marcado. Así lo nuevo se bloquea al instante y lo desmarcado deja
+                // de hacerlo (antes solo se hacía upsert y quedaban filas viejas).
+                execSQL("DELETE FROM blocked_apps")
                 apps.forEach { app ->
                     insertWithOnConflict(
                         "blocked_apps",

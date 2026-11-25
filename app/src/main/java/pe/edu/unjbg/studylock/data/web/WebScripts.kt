@@ -52,16 +52,54 @@ object WebScripts {
         })()
     """.trimIndent()
 
-    /** Devuelve todos los enlaces de la página como `[{t: texto, h: href}]`. */
+    /**
+     * Devuelve los enlaces de la página como `[{t: texto, h: href, k: origen}]`.
+     *
+     * Además de `<a href>`, se recogen los enlaces que usan las SPAs (Angular `routerLink`),
+     * atributos `data-url`/`data-href`, URLs dentro de `onclick` y botones de descarga. Así el modo
+     * inspección («Ver enlaces detectados») sirve aunque el portal no use enlaces clásicos.
+     */
     fun collectLinks(): String = """
         (function(){
           var out = [];
+          var seen = {};
+          function add(text, href, kind){
+            if (!href) return;
+            href = String(href).trim();
+            if (!href || href.charAt(0) === '#' || /^javascript:/i.test(href)) return;
+            var t = (text || '').replace(/\s+/g,' ').trim();
+            var key = href + '|' + t;
+            if (seen[key]) return;
+            seen[key] = 1;
+            if (/^https?:\/\//i.test(href) === false && href.charAt(0) !== '/') {
+              try { href = new URL(href, location.href).href; } catch(e){}
+            } else if (href.charAt(0) === '/') {
+              href = location.origin + href;
+            }
+            out.push({ t: t, h: href, k: kind });
+          }
+          function textOf(el){
+            var t = (el.innerText || el.textContent || '').replace(/\s+/g,' ').trim();
+            return t || el.getAttribute('title') || el.getAttribute('aria-label') || '';
+          }
           var anchors = document.querySelectorAll('a[href]');
-          for (var i=0;i<anchors.length;i++){
-            var a = anchors[i];
-            if (!a.href) continue;
-            var t = (a.textContent || '').replace(/\s+/g,' ').trim();
-            out.push({ t: t, h: a.href });
+          for (var i=0;i<anchors.length;i++) add(textOf(anchors[i]), anchors[i].href, 'a');
+
+          var routers = document.querySelectorAll('[routerLink],[routerlink],[data-url],[data-href]');
+          for (var j=0;j<routers.length;j++){
+            var el = routers[j];
+            var url = el.getAttribute('routerLink') || el.getAttribute('routerlink') ||
+                      el.getAttribute('data-url') || el.getAttribute('data-href');
+            add(textOf(el), url, el.hasAttribute('routerLink') || el.hasAttribute('routerlink') ? 'routerLink' : 'data-url');
+          }
+
+          var clickables = document.querySelectorAll('[onclick],button,input[type="button"]');
+          for (var k=0;k<clickables.length;k++){
+            var c = clickables[k];
+            var oc = c.getAttribute('onclick') || '';
+            var m = oc.match(/(?:href|url|location|window\.open)\s*=?\s*\(?\s*['"]([^'"]+)['"]/i);
+            if (!m) m = oc.match(/['"](\/[^'"]+\.(?:pdf|doc|docx|xls|xlsx|zip))['"]/i);
+            if (m) add(textOf(c), m[1], c.tagName === 'BUTTON' || c.tagName === 'INPUT' ? 'button' : 'onclick');
           }
           return JSON.stringify(out);
         })()

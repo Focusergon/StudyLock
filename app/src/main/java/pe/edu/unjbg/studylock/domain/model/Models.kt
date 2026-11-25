@@ -61,6 +61,13 @@ data class AnswerOption(
     val isCorrect: Boolean,
 )
 
+/** Nivel de una pregunta dentro de la progresión conceptos → procesos → temas generales. */
+enum class QuestionTier(val label: String) {
+    CONCEPTO("Concepto"),
+    PROCESO("Proceso"),
+    GENERAL("General"),
+}
+
 data class Question(
     val id: String,
     val topicId: String,
@@ -69,6 +76,12 @@ data class Question(
     val explanation: String,
     val difficulty: Int,
     val options: List<AnswerOption>,
+    val tier: QuestionTier = QuestionTier.CONCEPTO,
+    /** Agrupa conceptos, procesos y generales que hablan de la misma idea. */
+    val conceptKey: String = "",
+    val timesAsked: Int = 0,
+    val timesCorrect: Int = 0,
+    val correctStreak: Int = 0,
 ) {
     val correctOption: AnswerOption get() = options.first { it.isCorrect }
 }
@@ -83,7 +96,11 @@ data class MinuteTx(
     val createdAt: Long,
 )
 
-enum class SessionKind { REVIEW, CHALLENGE, EMERGENCY }
+/**
+ * [PRUEBA] son las 5 preguntas iniciales: dan minutos extra, pero no cuentan en preguntas,
+ * sesiones, precisión ni rachas. El resto sí alimenta las estadísticas.
+ */
+enum class SessionKind { REVIEW, CHALLENGE, EMERGENCY, PRUEBA }
 
 data class StudySession(
     val id: String,

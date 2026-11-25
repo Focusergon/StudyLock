@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import pe.edu.unjbg.studylock.core.designsystem.SlCard
 import pe.edu.unjbg.studylock.core.designsystem.SlColors
+import pe.edu.unjbg.studylock.core.designsystem.SlIconBadge
 import pe.edu.unjbg.studylock.core.designsystem.SlPill
 import pe.edu.unjbg.studylock.core.designsystem.SlPrimaryButton
 import pe.edu.unjbg.studylock.core.designsystem.SlProgressBar
@@ -51,7 +52,13 @@ import pe.edu.unjbg.studylock.ui.masteryColor
 import pe.edu.unjbg.studylock.ui.masteryLabel
 
 @Composable
-fun CoursesScreen(ui: CoursesUi, onOpenCourse: (String) -> Unit, onQuickReview: () -> Unit, onImport: () -> Unit) {
+fun CoursesScreen(
+    ui: CoursesUi,
+    onOpenCourse: (String) -> Unit,
+    onQuickReview: () -> Unit,
+    onImport: () -> Unit,
+    onOpenGuide: () -> Unit,
+) {
     SlScreen {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -96,6 +103,24 @@ fun CoursesScreen(ui: CoursesUi, onOpenCourse: (String) -> Unit, onQuickReview: 
                             )
                         }
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Color.White)
+                    }
+                }
+            }
+
+            item {
+                SlCard(color = SlColors.Mint, onClick = onOpenGuide) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SlIconBadge(Icons.Filled.School, SlColors.Teal, SlColors.Surface)
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Guía rápida", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+                            Text(
+                                "Aprende la app en 4 pasos · no otorga minutos",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlColors.Muted,
+                            )
+                        }
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = SlColors.Teal)
                     }
                 }
             }

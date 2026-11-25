@@ -6,6 +6,9 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import pe.edu.unjbg.studylock.core.util.InstalledAppsLoader
 import pe.edu.unjbg.studylock.data.prefs.AccessStore
@@ -30,8 +33,9 @@ class BlockingGate(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    @Volatile
-    private var blockedPackages: Set<String> = emptySet()
+    private val _blockedPackages = MutableStateFlow<Set<String>>(emptySet())
+    /** selección vigente; se lee en cada evento para no decidir con una copia vieja. */
+    val blockedPackages: StateFlow<Set<String>> = _blockedPackages.asStateFlow()
 
     @Volatile
     private var lastHandledAt: Long = 0L
@@ -41,7 +45,7 @@ class BlockingGate(
         // si el usuario cambia su selección en Ajustes/onboarding, el bloqueo se actualiza solo.
         scope.launch {
             blockedApps.observe().collect { apps ->
-                blockedPackages = apps.filter { it.enabled }.map { it.packageName }.toSet()
+                _blockedPackages.value = apps.filter { it.enabled }.map { it.packageName }.toSet()
             }
         }
     }
@@ -50,9 +54,12 @@ class BlockingGate(
     var accessibilityConnected: Boolean = false
         private set
 
+    /** Recarga desde la BD (llamado al guardar la selección y al iniciar servicio/equipo). */
     fun refreshBlockedPackages() {
-        scope.launch { blockedPackages = blockedApps.enabledPackages() }
+        scope.launch { _blockedPackages.value = blockedApps.enabledPackages() }
     }
+
+    fun isBlocked(packageName: String): Boolean = packageName in blockedPackages.value
 
     fun onServiceConnected() {
         accessibilityConnected = true
@@ -74,7 +81,7 @@ class BlockingGate(
         // registran arriba pero no se evalúan.
         if (packageName in SYSTEM_PACKAGES) return
         if (packageName == context.packageName) return
-        if (packageName !in blockedPackages) return
+        if (!isBlocked(packageName)) return
         scope.launch { evaluate(packageName) }
     }
 

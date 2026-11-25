@@ -12,13 +12,18 @@ object Routes {
     const val SETTINGS = "settings"
 
     const val IMPORT = "import"
+    const val GUIDE = "guide"
     const val SCHEDULE = "schedule"
     const val BLOCKED_APPS = "blocked_apps"
     const val ACCOUNTS = "accounts"
+    /** Auto-sync diario: abre la misma pantalla con el flag que dispara `sync()` al cargar. */
+    const val ACCOUNTS_AUTO = "accounts?autoSync=true"
 
     const val COURSE_DETAIL = "course/{courseId}"
     const val START_REVIEW = "start_review/{courseId}"
     const val SESSION = "session/{courseId}"
+    /** 5 preguntas de prueba desde el inicio: minutos extra, sin estadísticas. */
+    const val PRACTICE = "session/practice"
     const val ACCESS_ACTIVE = "access_active"
 
     /** Identificador especial: repaso adaptativo entre todos los cursos. */

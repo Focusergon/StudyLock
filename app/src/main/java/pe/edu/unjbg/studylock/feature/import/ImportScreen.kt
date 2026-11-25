@@ -4,6 +4,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -185,6 +187,10 @@ fun ImportScreen(viewModel: ImportViewModel, onBack: () -> Unit, onAccounts: () 
                 }
             }
 
+            if (ui.needsUploadConfirmation) {
+                item { UploadConfirmationCard(ui = ui, viewModel = viewModel) }
+            }
+
             if (ui.generating) {
                 item {
                     Row(
@@ -208,7 +214,8 @@ fun ImportScreen(viewModel: ImportViewModel, onBack: () -> Unit, onAccounts: () 
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("Vista previa", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
                                 Text(
-                                    text = "${ui.topics.size} temas · ${ui.questionCount} preguntas",
+                                    text = "${ui.topics.size} temas · ${ui.questionCount} preguntas" +
+                                        if (ui.usedAi) " · IA local" else "",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = SlColors.Muted,
                                 )
@@ -268,6 +275,106 @@ fun ImportScreen(viewModel: ImportViewModel, onBack: () -> Unit, onAccounts: () 
 
             item { Spacer(Modifier.height(12.dp)) }
         }
+    }
+}
+
+@Composable
+private fun UploadConfirmationCard(ui: ImportUi, viewModel: ImportViewModel) {
+    SlCard(color = SlColors.ChipBlue, border = false) {
+        Text("Confirma cómo guardar el archivo", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = ui.pendingFile.orEmpty(),
+            style = MaterialTheme.typography.bodySmall,
+            color = SlColors.Muted,
+        )
+        Spacer(Modifier.height(12.dp))
+
+        Text("Categoría", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
+        Spacer(Modifier.height(6.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ui.categories.forEach { category ->
+                val selected = ui.selectedCategory.equals(category, ignoreCase = true)
+                Text(
+                    text = category,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (selected) SlColors.Surface else SlColors.Ink,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (selected) SlColors.Primary else SlColors.Surface)
+                        .clickable { viewModel.setCategory(category) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SlTextField(
+                label = "Crear nueva categoría",
+                value = ui.customCategory,
+                onValueChange = viewModel::setCustomCategory,
+                placeholder = "Ej. Laboratorio",
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            SlTextButton(text = "Crear", onClick = viewModel::createCategory)
+        }
+        Spacer(Modifier.height(12.dp))
+
+        Text("Curso sugerido", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
+        Spacer(Modifier.height(6.dp))
+        if (ui.suggestedCourse != null) {
+            val suggested = ui.courses.firstOrNull { it.name == ui.suggestedCourse }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(SlColors.Surface)
+                    .clickable { viewModel.setCourse(suggested?.id) }
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SlIconBadge(Icons.Filled.School, SlColors.Primary, SlColors.ChipBlue, size = 34.dp)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = ui.suggestedCourse.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = SlColors.Ink,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = if (ui.selectedCourseId == suggested?.id) "Elegido" else "Usar",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SlColors.Primary,
+                )
+            }
+        } else {
+            Text(
+                text = "No encontramos un curso parecido. Se guardará en «Agregados».",
+                style = MaterialTheme.typography.bodySmall,
+                color = SlColors.Muted,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        SlTextButton(
+            text = "Sin curso (guardar en Agregados)",
+            onClick = { viewModel.setCourse(null) },
+            color = if (ui.selectedCourseId == null) SlColors.Primary else SlColors.Muted,
+        )
+        Spacer(Modifier.height(10.dp))
+        SlPrimaryButton(
+            text = if (ui.generating) "Guardando y analizando…" else "Guardar copia y generar preguntas",
+            onClick = viewModel::confirmUpload,
+            enabled = !ui.generating,
+            icon = Icons.Filled.UploadFile,
+        )
+        Spacer(Modifier.height(6.dp))
+        SlTextButton(text = "Cancelar", onClick = viewModel::cancelUpload, color = SlColors.Muted)
     }
 }
 

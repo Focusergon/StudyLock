@@ -88,9 +88,16 @@ class ContentRepositoryImpl(
                                 put("id", questionId)
                                 put("topic_id", topicId)
                                 put("prompt", question.prompt)
-                                put("explanation", question.explanation)
+                                // La cita queda anclada al texto original del material.
+                                put(
+                                    "explanation",
+                                    if (question.sourceQuote.isBlank()) question.explanation
+                                    else "${question.explanation}\n\nCita: «${question.sourceQuote}»",
+                                )
                                 put("difficulty", question.difficulty)
                                 put("sort", questionIndex)
+                                put("tier", question.tier.name)
+                                put("concept_key", question.conceptKey)
                             },
                             SQLiteDatabase.CONFLICT_REPLACE,
                         )

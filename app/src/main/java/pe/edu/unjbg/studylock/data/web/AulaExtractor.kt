@@ -10,14 +10,16 @@ import pe.edu.unjbg.studylock.domain.model.ContentSource
  * No se ataca ningún endpoint: se abre la web real en el mini-navegador, se inicia sesión con las
  * credenciales guardadas y se recorre el panel de cursos como lo haría el estudiante. De ese
  * recorrido sale un árbol de cursos → secciones → archivos.
+ *
+ * Si no se detecta ningún curso, se devuelve solo un aviso: **nunca** se genera un curso inventado
+ * para «rellenar» la pantalla.
  */
 class AulaExtractor(
     private val session: UnjbgWebSession,
     private val baseUrl: String,
 ) {
 
-    /** Abre sesión, descubre los cursos y arma el árbol. */
-    suspend fun sync(credentials: UnjbgCredentials, status: (String) -> Unit): List<ContentCourse> {
+    suspend fun sync(credentials: UnjbgCredentials, status: (String) -> Unit): ExtractionResult {
         status("Abriendo el Aula Virtual…")
         session.open(baseUrl)
 
@@ -28,32 +30,24 @@ class AulaExtractor(
             loginMessage = "Iniciando sesión en el Aula Virtual…",
             waitingMessage = "Completa el inicio de sesión en la ventana…",
         )
-        if (!loggedIn) return emptyList()
+        if (!loggedIn) {
+            return ExtractionResult(notice = "No se pudo iniciar sesión en el Aula Virtual. Revisa tus credenciales.")
+        }
 
         status("Buscando tus cursos…")
         session.settle()
 
-        val courses = session.collectLinks()
+        val allLinks = session.collectLinks()
+        val courses = allLinks
             .filter { LinkClassifier.looksLikeCourse(it.text, it.href) }
             .distinctBy { LinkClassifier.canonical(it.href) }
             .take(MAX_COURSES)
 
         if (courses.isEmpty()) {
-            // Sin cursos detectables: al menos rescatamos el material visible del panel.
-            val sections = session.crawlSections(baseUrl, maxPages = 6)
-            return if (sections.isEmpty()) {
-                emptyList()
-            } else {
-                listOf(
-                    ContentCourse(
-                        id = LinkClassifier.canonical(baseUrl),
-                        name = "Aula Virtual",
-                        subtitle = "Material del panel principal",
-                        source = ContentSource.AULA,
-                        sections = sections,
-                    ),
-                )
-            }
+            return ExtractionResult(
+                notice = "No se detectó ningún curso en el Aula Virtual.",
+                detectedLinks = allLinks,
+            )
         }
 
         val tree = ArrayList<ContentCourse>()
@@ -68,7 +62,7 @@ class AulaExtractor(
                 sections = sections,
             )
         }
-        return tree
+        return ExtractionResult(courses = tree)
     }
 
     private companion object {

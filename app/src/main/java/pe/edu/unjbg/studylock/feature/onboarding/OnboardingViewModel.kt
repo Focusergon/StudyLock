@@ -25,6 +25,7 @@ data class OnboardingUi(
     val connected: Boolean = false,
     val error: String? = null,
     val permissions: PermissionStatus = PermissionStatus(),
+    val restrictedAcknowledged: Boolean = false,
     val apps: List<InstalledApp> = emptyList(),
     val selected: Set<String> = emptySet(),
     val query: String = "",
@@ -42,10 +43,24 @@ class OnboardingViewModel(
     private val _ui = MutableStateFlow(OnboardingUi())
     val ui: StateFlow<OnboardingUi> = _ui.asStateFlow()
 
+    init {
+        viewModelScope.launch {
+            prefs.flow.collect { p ->
+                _ui.update { it.copy(restrictedAcknowledged = p.restrictedPermissionAcknowledged) }
+            }
+        }
+    }
+
+    fun setRestrictedAcknowledged(acknowledged: Boolean) {
+        _ui.update { it.copy(restrictedAcknowledged = acknowledged) }
+        viewModelScope.launch { prefs.setRestrictedPermissionAcknowledged(acknowledged) }
+    }
+
     fun refreshPermissions(context: Context) {
         _ui.update {
             it.copy(
                 permissions = PermissionStatus(
+                    restricted = _ui.value.restrictedAcknowledged,
                     usage = PermissionUtils.hasUsageAccess(context),
                     overlay = PermissionUtils.hasOverlay(context),
                     accessibility = PermissionUtils.isAccessibilityEnabled(context),

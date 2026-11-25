@@ -204,7 +204,12 @@ private fun ResultContent(ui: StudyUi, onDone: () -> Unit) {
         }
         Spacer(Modifier.height(20.dp))
         Text(
-            text = if (ui.accuracy >= 50) "¡Buen repaso!" else "Sigue practicando",
+            text = when {
+                ui.isPractice && ui.accuracy >= 80 -> "¡Buenas preguntas de prueba!"
+                ui.isPractice -> "Sigue con las preguntas de prueba"
+                ui.accuracy >= 50 -> "¡Buen repaso!"
+                else -> "Sigue practicando"
+            },
             style = MaterialTheme.typography.headlineMedium,
             color = SlColors.Ink,
             textAlign = TextAlign.Center,
@@ -240,7 +245,11 @@ private fun ResultContent(ui: StudyUi, onDone: () -> Unit) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Úsalos cuando quieras en tus apps limitadas.",
+                    text = if (ui.isPractice) {
+                        "Minutos extra: no cuentan en tu progreso ni en tus rachas."
+                    } else {
+                        "Úsalos cuando quieras en tus apps limitadas."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = SlColors.SubtleText,
                     textAlign = TextAlign.Center,
@@ -259,7 +268,11 @@ private fun ResultContent(ui: StudyUi, onDone: () -> Unit) {
         SlPrimaryButton(text = "Volver al inicio", onClick = onDone)
         Spacer(Modifier.height(10.dp))
         Text(
-            text = "Los temas fallados volverán a aparecer antes en tu próximo repaso.",
+            text = if (ui.isPractice) {
+                "Esta sesión no cambia tus estadísticas; puedes repetirla cuando quieras."
+            } else {
+                "Los temas fallados volverán a aparecer antes en tu próximo repaso."
+            },
             style = MaterialTheme.typography.bodySmall,
             color = SlColors.Muted,
             textAlign = TextAlign.Center,

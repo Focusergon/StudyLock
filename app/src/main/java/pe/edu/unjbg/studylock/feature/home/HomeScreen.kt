@@ -62,9 +62,12 @@ import java.util.Locale
 fun HomeScreen(
     ui: HomeUi,
     onStartReview: (String) -> Unit,
+    onStartPractice: () -> Unit,
+    onImportContent: () -> Unit,
     onOpenAccess: () -> Unit,
     onBrowseCourses: () -> Unit,
     onBlockedApps: () -> Unit,
+    onOpenGuide: () -> Unit,
 ) {
     val dashboard = ui.dashboard
     val accessStore = LocalAppGraph.current.accessStore
@@ -112,6 +115,41 @@ fun HomeScreen(
 
             item { BalanceCard(dashboard?.availableMinutes ?: 0, goal = ui.goalMinutes, onStart = { onStartReview(dashboard?.nextCourse?.id ?: Routes.WEAK) }) }
 
+            if (ui.practiceEnabled) {
+                item {
+                    SlCard(
+                        color = SlColors.Lavender,
+                        onClick = if (ui.hasPracticeQuestions) onStartPractice else onImportContent,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            SlIconBadge(Icons.Filled.Bolt, SlColors.Purple, SlColors.Surface)
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "5 preguntas de prueba",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = SlColors.Ink,
+                                )
+                                Text(
+                                    text = if (ui.hasPracticeQuestions) {
+                                        "Minutos extra al instante · no cuentan en tu progreso"
+                                    } else {
+                                        "Importa material o sincroniza tus cursos para usarlas"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = SlColors.Muted,
+                                )
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = SlColors.Purple,
+                            )
+                        }
+                    }
+                }
+            }
+
             if (remaining != null) {
                 item {
                     Row(
@@ -155,6 +193,27 @@ fun HomeScreen(
                         label = "aciertos",
                         modifier = Modifier.weight(1f),
                     )
+                }
+            }
+
+            item {
+                SlCard(
+                    color = SlColors.Mint,
+                    onClick = onOpenGuide,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SlIconBadge(Icons.Filled.School, SlColors.Teal, SlColors.Surface)
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Guía rápida · no otorga minutos", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+                            Text(
+                                "4 pasos y 3 preguntas para aprender a usar la app",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlColors.Muted,
+                            )
+                        }
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = SlColors.Teal)
+                    }
                 }
             }
 

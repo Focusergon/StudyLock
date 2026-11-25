@@ -18,7 +18,12 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 
 /** Un enlace encontrado en la página que el mini-navegador está mostrando. */
-data class WebLink(val text: String, val href: String)
+data class WebLink(
+    val text: String,
+    val href: String,
+    /** Origen del enlace: `a`, `routerLink`, `data-url`, `onclick` o `button`. */
+    val kind: String = "a",
+)
 
 /** Respuesta de una petición `fetch` hecha dentro de la sesión del WebView. */
 data class FetchResult(val ok: Boolean, val status: Int, val body: String)
@@ -91,7 +96,7 @@ class UnjbgWebSession(private val webView: WebView) {
             (0 until array.length()).mapNotNull { index ->
                 val obj = array.optJSONObject(index) ?: return@mapNotNull null
                 val href = obj.optString("h")
-                if (href.isBlank()) null else WebLink(obj.optString("t"), href)
+                if (href.isBlank()) null else WebLink(obj.optString("t"), href, obj.optString("k", "a"))
             }
         }.getOrDefault(emptyList())
     }

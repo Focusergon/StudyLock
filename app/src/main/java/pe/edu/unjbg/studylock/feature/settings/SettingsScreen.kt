@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -44,17 +45,19 @@ import pe.edu.unjbg.studylock.core.designsystem.SlCard
 import pe.edu.unjbg.studylock.core.designsystem.SlColors
 import pe.edu.unjbg.studylock.core.designsystem.SlIconBadge
 import pe.edu.unjbg.studylock.core.designsystem.SlPill
+import pe.edu.unjbg.studylock.core.designsystem.SlPrimaryButton
 import pe.edu.unjbg.studylock.core.designsystem.SlScreen
 import pe.edu.unjbg.studylock.core.designsystem.SlSectionLabel
 import pe.edu.unjbg.studylock.core.designsystem.SlTextButton
 import pe.edu.unjbg.studylock.core.util.PermissionUtils
+import pe.edu.unjbg.studylock.data.ai.ModelStatus
 import pe.edu.unjbg.studylock.ui.rememberPermissionStatus
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onAccounts: () -> Unit, onSchedule: () -> Unit, onBlockedApps: () -> Unit, onResetOnboarding: () -> Unit) {
     val context = LocalContext.current
     val ui by viewModel.ui.collectAsStateWithLifecycle()
-    val permissions = rememberPermissionStatus()
+    val permissions = rememberPermissionStatus(ui.prefs.restrictedPermissionAcknowledged)
 
     SlScreen {
         LazyColumn(
@@ -106,6 +109,21 @@ fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onAccount
                 SlSectionLabel("Permisos del sistema")
             }
 
+            item {
+                PermissionRow(
+                    icon = Icons.Filled.Lock,
+                    title = "Permisos restringidos",
+                    subtitle = "Paso previo en Android 13+ con APK",
+                    granted = ui.prefs.restrictedPermissionAcknowledged,
+                    onOpen = { runCatching { context.startActivity(PermissionUtils.appDetailsIntent(context)) } },
+                )
+                SettingSwitch(
+                    title = "Ya activé Permisos restringidos",
+                    subtitle = "Confirma cuando el sistema te lo permita",
+                    checked = ui.prefs.restrictedPermissionAcknowledged,
+                    onCheckedChange = viewModel::setRestrictedAcknowledged,
+                )
+            }
             item {
                 PermissionRow(
                     icon = Icons.Filled.QueryStats,
@@ -203,6 +221,13 @@ fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onAccount
                             colors = SwitchDefaults.colors(checkedTrackColor = SlColors.Teal),
                         )
                     }
+                    Spacer(Modifier.height(10.dp))
+                    SettingSwitch(
+                        title = "Preguntas de prueba",
+                        subtitle = "5 preguntas al inicio con minutos extra; solo se desactivan estas",
+                        checked = ui.prefs.practiceQuestionsEnabled,
+                        onCheckedChange = viewModel::setPracticeQuestions,
+                    )
                     Spacer(Modifier.height(16.dp))
                     Row(
                         modifier = Modifier
@@ -314,6 +339,95 @@ fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onAccount
 
             item {
                 Spacer(Modifier.height(2.dp))
+                SlSectionLabel("Sincronización")
+            }
+
+            item {
+                SlCard {
+                    SettingSwitch(
+                        title = "Sincronización automática",
+                        subtitle = "Al abrir la app, una vez al día, sin tocar nada",
+                        checked = ui.prefs.autoSync,
+                        onCheckedChange = viewModel::setAutoSync,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    SettingSwitch(
+                        title = "Sincronizar solo por Wi-Fi",
+                        subtitle = "Evita consumir datos móviles",
+                        checked = ui.prefs.autoSyncWifiOnly,
+                        enabled = ui.prefs.autoSync,
+                        onCheckedChange = viewModel::setAutoSyncWifiOnly,
+                    )
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(2.dp))
+                SlSectionLabel("Generador local")
+            }
+
+            item {
+                SlCard {
+                    Text(
+                        "Usar generador de preguntas local",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = SlColors.Ink,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    SettingSwitch(
+                        title = "Usar el generador al crear preguntas",
+                        subtitle = "Mezcla el modelo con el generador de respaldo",
+                        checked = ui.prefs.aiQuestions,
+                        onCheckedChange = viewModel::setAiQuestions,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    SettingSwitch(
+                        title = "Descargar modelo solo por Wi-Fi",
+                        subtitle = "El binario ocupa unos 290 MB",
+                        checked = ui.prefs.modelWifiOnly,
+                        enabled = ui.prefs.aiQuestions,
+                        onCheckedChange = viewModel::setModelWifiOnly,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        text = "Gemma 3 270M se ejecuta en tu teléfono: sin clave de API, sin subir tu material " +
+                            "y con verificación SHA-256 antes de usarlo. Si no está listo, se usa el respaldo determinista.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SlColors.Muted,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    when (ui.model.status) {
+                        ModelStatus.READY -> SlPill("Modelo verificado", SlColors.Teal, SlColors.Mint)
+                        ModelStatus.DOWNLOADING -> {
+                            LinearProgressIndicator(
+                                progress = { ui.model.progress / 100f },
+                                modifier = Modifier.fillMaxWidth(),
+                                color = SlColors.Primary,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(ui.model.message, style = MaterialTheme.typography.labelSmall, color = SlColors.Muted)
+                        }
+                        ModelStatus.WAITING_WIFI, ModelStatus.ERROR -> {
+                            Text(ui.model.message, style = MaterialTheme.typography.labelSmall, color = SlColors.Danger)
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        ModelStatus.MISSING -> Unit
+                    }
+                    SlPrimaryButton(
+                        text = when (ui.model.status) {
+                            ModelStatus.READY -> "Modelo listo"
+                            ModelStatus.DOWNLOADING -> "Descargando ${ui.model.progress}%"
+                            else -> "Aceptar y descargar modelo"
+                        },
+                        onClick = viewModel::downloadModel,
+                        enabled = !ui.modelReady && !ui.downloading,
+                        icon = null,
+                    )
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(2.dp))
                 SlSectionLabel("Privacidad")
             }
 
@@ -375,7 +489,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onAccount
                         .padding(vertical = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("StudyLock 0.2.0", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
+                    Text("StudyLock 0.3.0-beta.1", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
                     Text(
                         "Hecho para estudiantes de la UNJBG",
                         style = MaterialTheme.typography.bodySmall,
@@ -419,6 +533,28 @@ private fun PermissionRow(
             text = if (granted) "Activo" else "Pendiente",
             textColor = if (granted) SlColors.Teal else SlColors.Danger,
             background = if (granted) SlColors.Mint else SlColors.DangerSoft,
+        )
+    }
+}
+
+@Composable
+private fun SettingSwitch(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = SlColors.Muted)
+        }
+        Switch(
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(checkedTrackColor = SlColors.Teal),
         )
     }
 }

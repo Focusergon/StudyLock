@@ -26,6 +26,7 @@ data class StudyUi(
     val finished: Boolean = false,
     val minutesAwarded: Int = 0,
     val empty: Boolean = false,
+    val isPractice: Boolean = false,
 ) {
     val current: Question? get() = questions.getOrNull(index)
     val total: Int get() = questions.size
@@ -44,6 +45,9 @@ class StudyViewModel(
     private var sessionId: String = ""
     private var finishedOnce = false
 
+    private val practice: Boolean get() = courseId == Routes.PRACTICE
+    private val kind: SessionKind get() = if (practice) SessionKind.PRUEBA else SessionKind.REVIEW
+
     init {
         load()
     }
@@ -51,18 +55,19 @@ class StudyViewModel(
     private fun load() {
         viewModelScope.launch {
             val weak = courseId == Routes.WEAK
-            val course = if (weak) null else graph.courses.getCourse(courseId)
-            val draft = if (weak) {
-                graph.study.startWeakSession(SessionKind.REVIEW, RewardPolicy.REVIEW_QUESTIONS)
-            } else {
-                graph.study.startSession(courseId, SessionKind.REVIEW, RewardPolicy.REVIEW_QUESTIONS)
+            val course = if (weak || practice) null else graph.courses.getCourse(courseId)
+            val draft = when {
+                practice -> graph.study.startPracticeSession(RewardPolicy.PRACTICE_QUESTIONS)
+                weak -> graph.study.startWeakSession(SessionKind.REVIEW, RewardPolicy.REVIEW_QUESTIONS)
+                else -> graph.study.startSession(courseId, SessionKind.REVIEW, RewardPolicy.REVIEW_QUESTIONS)
             }
             sessionId = draft.sessionId
             _ui.value = StudyUi(
                 loading = false,
-                courseName = course?.name ?: "Repaso adaptativo",
+                courseName = course?.name ?: if (practice) "5 preguntas de prueba" else "Repaso adaptativo",
                 questions = draft.questions,
                 empty = draft.questions.isEmpty(),
+                isPractice = practice,
             )
         }
     }
@@ -73,7 +78,11 @@ class StudyViewModel(
         if (state.answered || state.finished || state.loading) return
         _ui.update { it.copy(selectedOptionId = optionId) }
         viewModelScope.launch {
-            val correct = graph.study.answer(sessionId, question, optionId)
+            val correct = if (practice) {
+                graph.study.answerPractice(question, optionId)
+            } else {
+                graph.study.answer(sessionId, question, optionId)
+            }
             _ui.update {
                 it.copy(
                     answered = true,
@@ -110,8 +119,12 @@ class StudyViewModel(
         finishedOnce = true
         _ui.update { it.copy(finishing = true) }
         viewModelScope.launch {
-            val minutes = RewardPolicy.minutesFor(SessionKind.REVIEW, state.total, state.correctCount)
-            graph.study.finishSession(sessionId, state.total, state.correctCount, minutes)
+            val minutes = RewardPolicy.minutesFor(kind, state.total, state.correctCount)
+            if (practice) {
+                graph.study.finishPracticeSession(sessionId, state.total, state.correctCount, minutes)
+            } else {
+                graph.study.finishSession(sessionId, state.total, state.correctCount, minutes)
+            }
             _ui.update { it.copy(finishing = false, finished = true, minutesAwarded = minutes) }
         }
     }

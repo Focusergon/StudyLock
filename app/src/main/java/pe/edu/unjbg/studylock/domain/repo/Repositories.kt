@@ -32,6 +32,18 @@ interface CourseRepository {
 interface StudyRepository {
     suspend fun startSession(courseId: String, kind: SessionKind, count: Int): SessionDraft
     suspend fun startWeakSession(kind: SessionKind, count: Int): SessionDraft
+
+    /** 5 primeras preguntas: se evalúan, pero no alteran topic/question/daily_stats. */
+    suspend fun startPracticeSession(count: Int): SessionDraft
+    fun observePracticeQuestionCount(): Flow<Int>
+    suspend fun answerPractice(question: Question, chosenOptionId: String): Boolean
+    suspend fun finishPracticeSession(
+        sessionId: String,
+        questionCount: Int,
+        correctCount: Int,
+        minutesAwarded: Int,
+    )
+
     suspend fun answer(sessionId: String, question: Question, chosenOptionId: String): Boolean
     suspend fun finishSession(sessionId: String, questionCount: Int, correctCount: Int, minutesAwarded: Int)
 }
@@ -47,6 +59,7 @@ interface MinuteRepository {
 
 interface BlockedAppsRepository {
     fun observe(): Flow<List<BlockedApp>>
+    /** Reemplaza la selección completa: lo que no esté en [apps] deja de bloquearse. */
     suspend fun saveAll(apps: List<BlockedApp>)
     suspend fun setEnabled(packageName: String, enabled: Boolean)
     suspend fun remove(packageName: String)

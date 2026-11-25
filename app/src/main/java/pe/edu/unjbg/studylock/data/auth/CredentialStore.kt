@@ -23,6 +23,8 @@ data class UnjbgCredentials(
     val intranetUser: String = "",
     val intranetPassword: String = "",
     val samePassword: Boolean = true,
+    val aulaUrl: String = "https://aulavirtual.unjbg.edu.pe",
+    val intranetUrl: String = "https://intranet.unjbg.edu.pe",
 ) {
     /** Usuario de la Intranet; si no se indicó, se reutiliza el del Aula Virtual. */
     val effectiveIntranetUser: String get() = intranetUser.ifBlank { aulaUser }
@@ -56,6 +58,8 @@ class CredentialStore(
             intranetUser = cipher.decrypt(prefs[Keys.INTRANET_USER].orEmpty()),
             intranetPassword = cipher.decrypt(prefs[Keys.INTRANET_PASSWORD].orEmpty()),
             samePassword = prefs[Keys.SAME_PASSWORD] ?: true,
+            aulaUrl = prefs[Keys.AULA_URL].takeUnless { it.isNullOrBlank() } ?: "https://aulavirtual.unjbg.edu.pe",
+            intranetUrl = prefs[Keys.INTRANET_URL].takeUnless { it.isNullOrBlank() } ?: "https://intranet.unjbg.edu.pe",
         )
     }
 
@@ -70,6 +74,8 @@ class CredentialStore(
                 if (credentials.samePassword) "" else credentials.intranetPassword,
             )
             prefs[Keys.SAME_PASSWORD] = credentials.samePassword
+            prefs[Keys.AULA_URL] = credentials.aulaUrl.ifBlank { "https://aulavirtual.unjbg.edu.pe" }
+            prefs[Keys.INTRANET_URL] = credentials.intranetUrl.ifBlank { "https://intranet.unjbg.edu.pe" }
         }
     }
 
@@ -83,5 +89,7 @@ class CredentialStore(
         val INTRANET_USER = stringPreferencesKey("intranet_user")
         val INTRANET_PASSWORD = stringPreferencesKey("intranet_password")
         val SAME_PASSWORD = booleanPreferencesKey("same_password")
+        val AULA_URL = stringPreferencesKey("aula_url")
+        val INTRANET_URL = stringPreferencesKey("intranet_url")
     }
 }

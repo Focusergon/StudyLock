@@ -12,14 +12,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import pe.edu.unjbg.studylock.core.text.PdfTextExtractor
 import pe.edu.unjbg.studylock.data.auth.CredentialStore
+import pe.edu.unjbg.studylock.data.content.ContentStore
 import pe.edu.unjbg.studylock.data.auth.UnjbgCredentials
 import pe.edu.unjbg.studylock.data.web.AulaExtractor
+import pe.edu.unjbg.studylock.data.web.ExtractionResult
 import pe.edu.unjbg.studylock.data.web.FileDownloader
 import pe.edu.unjbg.studylock.data.web.IntranetExtractor
 import pe.edu.unjbg.studylock.data.web.UnjbgWebSession
 import pe.edu.unjbg.studylock.data.web.WebCookies
+import pe.edu.unjbg.studylock.data.web.WebLink
+import pe.edu.unjbg.studylock.data.content.ContentPaths
+import pe.edu.unjbg.studylock.domain.content.ContentMerger
 import pe.edu.unjbg.studylock.domain.content.GeneratedTopic
-import pe.edu.unjbg.studylock.domain.content.QuestionGenerator
+import pe.edu.unjbg.studylock.domain.content.HybridQuestionGenerator
 import pe.edu.unjbg.studylock.domain.model.ContentCourse
 import pe.edu.unjbg.studylock.domain.model.ContentFile
 import pe.edu.unjbg.studylock.domain.model.ContentSource
@@ -46,6 +51,11 @@ data class AccountsUi(
     val selected: Set<String> = emptySet(),
     val importing: Boolean = false,
     val resultMessage: String? = null,
+    /** Avisos de los portales cuando no se detectó contenido (nunca se inventa contenido). */
+    val notices: List<String> = emptyList(),
+    /** Enlaces vistos en el mini-navegador, para el modo inspección. */
+    val detectedLinks: List<WebLink> = emptyList(),
+    val showLinks: Boolean = false,
 ) {
     /** Se exige el Aula Virtual; la Intranet se deriva de ella si se marca «misma contraseña». */
     val canSave: Boolean
@@ -80,8 +90,15 @@ object AccountsDefaults {
 class AccountsViewModel(
     private val credentials: CredentialStore,
     private val content: ContentRepository,
+    private val store: ContentStore,
+    private val generator: HybridQuestionGenerator,
     private val downloader: FileDownloader = FileDownloader(),
+    /** Auto-sync diario: la navegación lo activa después de comprobar pref, Wi-Fi y fecha. */
+    private val autoSync: Boolean = false,
 ) : ViewModel() {
+
+    /** Sílabos sin curso del Aula: se archivan en `agregados/` al generar. */
+    private var unmatchedSyllabi: List<ContentCourse> = emptyList()
 
     private val _ui = MutableStateFlow(AccountsUi())
     val ui: StateFlow<AccountsUi> = _ui.asStateFlow()
@@ -100,8 +117,13 @@ class AccountsViewModel(
                     intranetUser = stored.intranetUser,
                     intranetPassword = stored.intranetPassword,
                     samePassword = stored.samePassword,
+                    aulaUrl = stored.aulaUrl.ifBlank { AccountsDefaults.AULA_URL },
+                    intranetUrl = stored.intranetUrl.ifBlank { AccountsDefaults.INTRANET_URL },
                 )
             }
+            // Sin WebView todavía no se puede sincronizar: la UI crea el panel en cuanto
+            // `browserVisible` pasa a true y entonces entrega la sesión a `attachSession`.
+            if (autoSync && stored.hasAula) sync()
         }
     }
 
@@ -117,6 +139,7 @@ class AccountsViewModel(
     fun setIntranetUrl(value: String) = _ui.update { it.copy(intranetUrl = value.trim(), error = null) }
     fun dismissError() = _ui.update { it.copy(error = null) }
     fun dismissResult() = _ui.update { it.copy(resultMessage = null) }
+    fun toggleLinks() = _ui.update { it.copy(showLinks = !it.showLinks) }
 
     /** Guarda las credenciales cifradas sin conectar. */
     fun save() {
@@ -166,6 +189,9 @@ class AccountsViewModel(
                 tree = emptyList(),
                 selected = emptySet(),
                 browserVisible = true,
+                notices = emptyList(),
+                detectedLinks = emptyList(),
+                showLinks = false,
                 status = "Preparando el navegador…",
             )
         }
@@ -177,15 +203,28 @@ class AccountsViewModel(
 
             val webSession = ready.await()
             val aula = runCatching { AulaExtractor(webSession, state.aulaUrl).sync(creds, status) }
-                .getOrDefault(emptyList())
+                .getOrDefault(ExtractionResult(notice = "No se pudo leer el Aula Virtual."))
             val intranet = if (creds.hasIntranet) {
                 runCatching { IntranetExtractor(webSession, state.intranetUrl).sync(creds, status) }
-                    .getOrDefault(emptyList())
+                    .getOrDefault(ExtractionResult(notice = "No se pudo leer la Intranet."))
             } else {
-                emptyList()
+                ExtractionResult()
             }
 
-            val tree = aula + intranet
+            val merged = ContentMerger.merge(aula.courses, intranet.courses)
+            unmatchedSyllabi = merged.unmatchedSyllabi
+            val tree = merged.courses
+            val notices = listOfNotNull(aula.notice, intranet.notice) + if (unmatchedSyllabi.isEmpty()) {
+                emptyList()
+            } else {
+                listOf(
+                    "${unmatchedSyllabi.size} sílabo(s) no coinciden con ningún curso del Aula. " +
+                        "Se guardarán en «Agregados» con una aviso; no se creó ningún curso falso."
+                )
+            }
+            val links = (aula.detectedLinks + intranet.detectedLinks)
+                .distinctBy { it.href + it.text }
+                .take(200)
             val autoSelected = tree.flatMap { course -> course.files.filter { it.isImportable }.map { it.url } }.toSet()
             _ui.update {
                 it.copy(
@@ -194,11 +233,10 @@ class AccountsViewModel(
                     status = "",
                     tree = tree,
                     selected = autoSelected,
-                    error = if (tree.none { course -> course.files.isNotEmpty() }) {
-                        "No encontramos archivos. Verifica tus credenciales e inténtalo de nuevo."
-                    } else {
-                        null
-                    },
+                    notices = notices,
+                    detectedLinks = links,
+                    // Sin contenido no mostramos un error genérico: el aviso ya dice qué pasó.
+                    error = null,
                 )
             }
         }
@@ -232,9 +270,25 @@ class AccountsViewModel(
         viewModelScope.launch {
             var importedCourses = 0
             var totalQuestions = 0
+            var usedAi = false
+            val storedCourses = ArrayList<ContentStore.StoredCourse>()
+            val previous = store.manifest()
 
             for (course in state.tree) {
-                val topics = withContext(Dispatchers.Default) { generateFor(course, state.selected) }
+                val storedSections = ArrayList<ContentStore.StoredSection>()
+                val outcome = withContext(Dispatchers.Default) {
+                    generateFor(course, state.selected, storedSections)
+                }
+                val topics = outcome.topics
+                if (outcome.usedAi) usedAi = true
+                if (storedSections.isNotEmpty()) {
+                    storedCourses += ContentStore.StoredCourse(
+                        id = course.id,
+                        name = course.name,
+                        source = course.source.name,
+                        sections = storedSections,
+                    )
+                }
                 if (topics.isEmpty()) continue
                 val result = content.importCourse(
                     courseName = course.name,
@@ -247,8 +301,33 @@ class AccountsViewModel(
                 totalQuestions += result.questionCount
             }
 
+            // Sílabos sin coincidencia: copia física en agregados/, nunca un curso inventado.
+            val added = ArrayList(previous.added)
+            for (syllabus in unmatchedSyllabi) {
+                for (file in syllabus.files.filter { it.isImportable }) {
+                    val bytes = downloadBytes(file) ?: continue
+                    val stored = store.storeAdded(
+                        name = file.name,
+                        bytes = bytes,
+                        category = "Sílabos sin curso",
+                        suggestedCourse = syllabus.name,
+                        sourceUrl = file.url,
+                    ) ?: continue
+                    added += stored
+                }
+            }
+
+            store.saveManifest(
+                previous.copy(
+                    lastSyncAt = System.currentTimeMillis(),
+                    fingerprint = ContentPaths.fingerprint(state.tree),
+                    courses = storedCourses.ifEmpty { previous.courses },
+                    added = added,
+                )
+            )
+
             _ui.update {
-                if (importedCourses == 0) {
+                if (importedCourses == 0 && added.isEmpty()) {
                     it.copy(
                         importing = false,
                         error = "No se pudieron extraer preguntas del material seleccionado. Prueba con otro archivo.",
@@ -256,7 +335,9 @@ class AccountsViewModel(
                 } else {
                     it.copy(
                         importing = false,
-                        resultMessage = "Listo: $importedCourses curso(s) y $totalQuestions preguntas.",
+                        resultMessage = "Listo: $importedCourses curso(s), $totalQuestions preguntas " +
+                            "y ${added.size} archivo(s) agregado(s)." +
+                            if (usedAi) " Algunas preguntas usaron el modelo local." else "",
                         selected = emptySet(),
                     )
                 }
@@ -290,44 +371,84 @@ class AccountsViewModel(
         intranetUser = _ui.value.intranetUser.trim(),
         intranetPassword = _ui.value.intranetPassword,
         samePassword = _ui.value.samePassword,
+        aulaUrl = _ui.value.aulaUrl,
+        intranetUrl = _ui.value.intranetUrl,
     )
 
-    private suspend fun generateFor(course: ContentCourse, selected: Set<String>): List<GeneratedTopic> {
+    private suspend fun generateFor(
+        course: ContentCourse,
+        selected: Set<String>,
+        storedSections: MutableList<ContentStore.StoredSection>,
+    ): CourseGeneration {
         val topics = ArrayList<GeneratedTopic>()
+        var usedAi = false
         for (section in course.sections) {
             val body = StringBuilder()
+            val storedFiles = ArrayList<ContentStore.StoredFile>()
             for (file in section.files) {
-                if (file.url !in selected) continue
-                val text = downloadText(file) ?: continue
+                if (file.url !in selected || !file.isImportable) continue
+                val stored = storeAndRead(course, section.name, file) ?: continue
+                storedFiles += stored.first
+                val text = stored.second
                 if (text.isNotBlank()) body.append(text).append("\n\n")
             }
+            if (storedFiles.isNotEmpty()) {
+                storedSections += ContentStore.StoredSection(section.name, storedFiles)
+            }
             if (body.isBlank()) continue
-            val generated = QuestionGenerator.generate(body.toString(), section.name, maxQuestions = 8)
-            if (generated.size >= 2) topics += GeneratedTopic(section.name, generated)
+            val outcome = generator.generate(body.toString(), section.name, maxQuestions = 8)
+            if (outcome.usedAi) usedAi = true
+            if (outcome.questions.size >= 2) topics += GeneratedTopic(section.name, outcome.questions)
         }
         if (topics.isEmpty()) {
             val whole = StringBuilder()
             for (file in course.files) {
-                if (file.url !in selected) continue
-                val text = downloadText(file) ?: continue
+                if (file.url !in selected || !file.isImportable) continue
+                val stored = storeAndRead(course, course.name, file) ?: continue
+                val text = stored.second
                 if (text.isNotBlank()) whole.append(text).append("\n\n")
             }
             if (whole.isNotBlank()) {
-                val generated = QuestionGenerator.generate(whole.toString(), course.name, maxQuestions = 12)
-                if (generated.size >= 2) topics += GeneratedTopic(course.name, generated)
+                val outcome = generator.generate(whole.toString(), course.name, maxQuestions = 12)
+                if (outcome.usedAi) usedAi = true
+                if (outcome.questions.size >= 2) topics += GeneratedTopic(course.name, outcome.questions)
             }
         }
-        return topics
+        return CourseGeneration(topics, usedAi)
     }
 
-    private suspend fun downloadText(file: ContentFile): String? {
-        val cookie = WebCookies.cookieFor(file.url)
-        val bytes = downloader.download(file.url, cookie) ?: return null
+    private data class CourseGeneration(
+        val topics: List<GeneratedTopic>,
+        val usedAi: Boolean,
+    )
+
+    /** Descarga (solo si cambió), guarda la copia física y devuelve el texto extraído. */
+    private suspend fun storeAndRead(
+        course: ContentCourse,
+        sectionName: String,
+        file: ContentFile,
+    ): Pair<ContentStore.StoredFile, String>? {
+        val existing = store.manifest().courses.firstOrNull { it.id == course.id }
+            ?.sections?.flatMap { it.files }
+            ?.firstOrNull { it.sourceUrl == file.url }
+        val bytes = if (existing != null && !ContentPaths.needsDownload(file, existing.sha256, existing.sizeBytes)) {
+            val physical = store.physicalFile(existing.relativePath)
+            if (physical.exists()) physical.readBytes() else downloadBytes(file)
+        } else {
+            downloadBytes(file)
+        } ?: return null
         if (bytes.isEmpty()) return null
-        return if (PdfTextExtractor.looksLikePdf(bytes)) {
+        val stored = store.storeDownloaded(course, sectionName, file, bytes) ?: return null
+        val text = if (PdfTextExtractor.looksLikePdf(bytes)) {
             PdfTextExtractor.extract(bytes)
         } else {
             String(bytes, Charsets.UTF_8)
         }
+        return stored to text
+    }
+
+    private suspend fun downloadBytes(file: ContentFile): ByteArray? {
+        val cookie = WebCookies.cookieFor(file.url)
+        return downloader.download(file.url, cookie)
     }
 }

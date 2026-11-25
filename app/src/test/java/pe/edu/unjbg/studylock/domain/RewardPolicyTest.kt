@@ -45,6 +45,22 @@ class RewardPolicyTest {
     }
 
     @Test
+    fun `practice questions use the same reward table as a review`() {
+        assertEquals(5, RewardPolicy.minutesFor(SessionKind.PRUEBA, questionCount = 5, correctCount = 4))
+        assertEquals(3, RewardPolicy.minutesFor(SessionKind.PRUEBA, questionCount = 5, correctCount = 3))
+        assertEquals(2, RewardPolicy.minutesFor(SessionKind.PRUEBA, questionCount = 5, correctCount = 1))
+        assertEquals(0, RewardPolicy.minutesFor(SessionKind.PRUEBA, questionCount = 0, correctCount = 0))
+        assertEquals(5, RewardPolicy.PRACTICE_QUESTIONS)
+    }
+
+    @Test
+    fun `practice sessions are excluded from statistics but keep their minutes`() {
+        assertEquals(false, RewardPolicy.countsForStats(SessionKind.PRUEBA))
+        assertEquals(true, RewardPolicy.countsForStats(SessionKind.REVIEW))
+        assertEquals(true, RewardPolicy.countsForStats(SessionKind.CHALLENGE))
+    }
+
+    @Test
     fun `study minutes are at least one per non empty session`() {
         assertEquals(0, RewardPolicy.studyMinutes(0))
         assertEquals(1, RewardPolicy.studyMinutes(1))

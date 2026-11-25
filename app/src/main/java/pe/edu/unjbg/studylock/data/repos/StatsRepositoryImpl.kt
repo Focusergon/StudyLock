@@ -76,7 +76,8 @@ class StatsRepositoryImpl(
         val totalCorrect = stats.sumOf { it.correct }
         val startMs = TimeUtils.startOfDay(System.currentTimeMillis() - 6L * 24 * 60 * 60 * 1000)
         val sessions = db.readableDatabase.count(
-            "SELECT COUNT(*) FROM sessions WHERE finished_at IS NOT NULL AND finished_at >= $startMs",
+            "SELECT COUNT(*) FROM sessions WHERE finished_at IS NOT NULL " +
+                "AND kind <> 'PRUEBA' AND finished_at >= $startMs",
         )
         return WeeklyProgress(
             minutes = week.sumOf { it.minutes },

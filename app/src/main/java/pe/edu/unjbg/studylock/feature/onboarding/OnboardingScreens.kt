@@ -38,6 +38,8 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -303,9 +305,14 @@ fun ConnectAccountScreen(
 }
 
 @Composable
-fun PermissionsScreen(onBack: () -> Unit, onContinue: () -> Unit) {
+fun PermissionsScreen(
+    viewModel: OnboardingViewModel,
+    onBack: () -> Unit,
+    onContinue: () -> Unit,
+) {
     val context = LocalContext.current
-    val status = rememberPermissionStatus()
+    val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val status = rememberPermissionStatus(ui.restrictedAcknowledged)
 
     SlScreen {
         SlTopBar(onBack = onBack, title = "Permisos")
@@ -323,13 +330,19 @@ fun PermissionsScreen(onBack: () -> Unit, onContinue: () -> Unit) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "StudyLock necesita tres permisos para detectar la app que abres, mostrar el reto y " +
-                    "controlar el tiempo de acceso.",
+                text = "Primero activa Permisos restringidos y luego los tres permisos del filtro: " +
+                    "sin ese paso previo, algunos dispositivos no dejan activar los demás.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = SlColors.Muted,
             )
             Spacer(Modifier.height(20.dp))
 
+            RestrictedPermissionCard(
+                acknowledged = ui.restrictedAcknowledged,
+                onOpen = { runCatching { context.startActivity(PermissionUtils.appDetailsIntent(context)) } },
+                onAcknowledge = viewModel::setRestrictedAcknowledged,
+            )
+            Spacer(Modifier.height(12.dp))
             PermissionCard(
                 icon = Icons.Filled.QueryStats,
                 title = "Acceso al uso de apps",
@@ -375,11 +388,74 @@ fun PermissionsScreen(onBack: () -> Unit, onContinue: () -> Unit) {
 
             Spacer(Modifier.height(20.dp))
             SlPrimaryButton(
-                text = if (status.allGranted) "Continuar" else "Faltan ${status.total - status.grantedCount} permisos",
+                text = when {
+                    status.allGranted -> "Continuar"
+                    !status.restricted -> "Activa primero Permisos restringidos"
+                    else -> "Faltan ${status.total - status.grantedCount} permisos"
+                },
                 onClick = onContinue,
                 enabled = status.allGranted,
             )
             Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun RestrictedPermissionCard(
+    acknowledged: Boolean,
+    onOpen: () -> Unit,
+    onAcknowledge: (Boolean) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (acknowledged) SlColors.Mint else SlColors.DangerSoft)
+            .border(1.dp, if (acknowledged) SlColors.Teal else SlColors.Danger, RoundedCornerShape(18.dp))
+            .padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SlIconBadge(
+                icon = Icons.Filled.Lock,
+                tint = if (acknowledged) SlColors.Teal else SlColors.Danger,
+                background = SlColors.Surface,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text("1. Permisos restringidos", style = MaterialTheme.typography.titleSmall, color = SlColors.Ink)
+                Text(
+                    text = "Android 13+ con APK: Información de la app → menú ⋮ → Permitir permisos restringidos. " +
+                        "Sin esto, el sistema puede impedir activar los otros permisos.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SlColors.Muted,
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = "Abrir ajustes de la app",
+            style = MaterialTheme.typography.labelLarge,
+            color = SlColors.Primary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(SlColors.Surface)
+                .clickable(onClick = onOpen)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Ya lo activé",
+                style = MaterialTheme.typography.bodySmall,
+                color = SlColors.Ink,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = acknowledged,
+                onCheckedChange = onAcknowledge,
+                colors = SwitchDefaults.colors(checkedTrackColor = SlColors.Teal),
+            )
         }
     }
 }

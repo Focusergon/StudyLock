@@ -22,8 +22,8 @@ android {
         applicationId = "pe.edu.unjbg.studylock"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0-beta.1"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -80,6 +80,10 @@ dependencies {
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.work.runtime.ktx)
+    // Modelo local: sin clave de API y sin llamadas a internet al generar preguntas.
+    implementation(libs.litertlm.android)
+    // Parseo estricto de la respuesta del modelo (también usado por los tests JVM).
+    implementation(libs.gson)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

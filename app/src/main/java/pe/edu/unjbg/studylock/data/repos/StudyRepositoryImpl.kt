@@ -3,17 +3,24 @@ package pe.edu.unjbg.studylock.data.repos
 import android.database.sqlite.SQLiteDatabase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import pe.edu.unjbg.studylock.core.util.TimeUtils
 import pe.edu.unjbg.studylock.data.local.StudyLockDatabase
+import pe.edu.unjbg.studylock.data.local.count
 import pe.edu.unjbg.studylock.data.local.i
 import pe.edu.unjbg.studylock.data.local.l
 import pe.edu.unjbg.studylock.data.local.list
 import pe.edu.unjbg.studylock.data.local.str
 import pe.edu.unjbg.studylock.domain.RewardPolicy
 import pe.edu.unjbg.studylock.domain.ReviewScheduler
+import pe.edu.unjbg.studylock.domain.content.QuestionProgress
+import pe.edu.unjbg.studylock.domain.content.QuestionProgression
 import pe.edu.unjbg.studylock.domain.model.AnswerOption
 import pe.edu.unjbg.studylock.domain.model.Question
+import pe.edu.unjbg.studylock.domain.model.QuestionTier
 import pe.edu.unjbg.studylock.domain.model.SessionKind
 import pe.edu.unjbg.studylock.domain.model.Topic
 import pe.edu.unjbg.studylock.domain.repo.SessionDraft
@@ -27,6 +34,11 @@ private data class QuestionRow(
     val prompt: String,
     val explanation: String,
     val difficulty: Int,
+    val tier: QuestionTier,
+    val conceptKey: String,
+    val timesAsked: Int,
+    val timesCorrect: Int,
+    val correctStreak: Int,
 )
 
 class StudyRepositoryImpl(
@@ -36,7 +48,7 @@ class StudyRepositoryImpl(
 
     override suspend fun startSession(courseId: String, kind: SessionKind, count: Int): SessionDraft =
         withContext(io) {
-            val questions = pickQuestions(ReviewScheduler.sortByPriority(loadTopics(courseId)), count)
+            val questions = pickQuestions(ReviewScheduler.sortByPriority(loadTopics(courseId)), count, mixedTiers = false)
             val sessionId = UUID.randomUUID().toString()
             insertSession(sessionId, courseId, kind, questions.size)
             db.notifyChanged()
@@ -44,11 +56,60 @@ class StudyRepositoryImpl(
         }
 
     override suspend fun startWeakSession(kind: SessionKind, count: Int): SessionDraft = withContext(io) {
-        val questions = pickQuestions(ReviewScheduler.sortByPriority(loadAllTopics()), count)
+        val questions = pickQuestions(
+            ReviewScheduler.sortByPriority(loadAllTopics()),
+            count,
+            mixedTiers = kind == SessionKind.CHALLENGE,
+        )
         val sessionId = UUID.randomUUID().toString()
         insertSession(sessionId, questions.firstOrNull()?.courseId.orEmpty(), kind, questions.size)
         db.notifyChanged()
         SessionDraft(sessionId, questions.firstOrNull()?.courseId.orEmpty(), questions)
+    }
+
+    override suspend fun startPracticeSession(count: Int): SessionDraft = withContext(io) {
+        // Las preguntas de prueba son las "primeras preguntas": concepto antes que procesos,
+        // sin exigir la progresión por estadísticas y sin tocar contadores reales.
+        val questions = pickQuestions(
+            ReviewScheduler.sortByPriority(loadAllTopics()),
+            count,
+            mixedTiers = false,
+            ignoreProgression = true,
+        )
+        val sessionId = UUID.randomUUID().toString()
+        insertSession(sessionId, questions.firstOrNull()?.courseId.orEmpty(), SessionKind.PRUEBA, questions.size)
+        db.notifyChanged()
+        SessionDraft(sessionId, questions.firstOrNull()?.courseId.orEmpty(), questions)
+    }
+
+    override fun observePracticeQuestionCount(): Flow<Int> = db.changes
+        .map { countPracticeQuestions() }
+        .flowOn(io)
+
+    override suspend fun answerPractice(question: Question, chosenOptionId: String): Boolean = withContext(io) {
+        question.options.firstOrNull { it.id == chosenOptionId }?.isCorrect == true
+    }
+
+    override suspend fun finishPracticeSession(
+        sessionId: String,
+        questionCount: Int,
+        correctCount: Int,
+        minutesAwarded: Int,
+    ) = withContext(io) {
+        val now = System.currentTimeMillis()
+        db.writableDatabase.apply {
+            execSQL(
+                "UPDATE sessions SET finished_at=?, question_count=?, correct_count=?, minutes_awarded=? WHERE id=?",
+                arrayOf<Any?>(now, questionCount, correctCount, minutesAwarded, sessionId),
+            )
+            if (minutesAwarded > 0) {
+                insertMinuteTx(this, minutesAwarded, "EARNED", "Bono por 5 preguntas de prueba", now)
+            }
+            // Solo los minutos se acreditan como puntos: nada de preguntas, aciertos ni
+            // tiempo de estudio, para que no entren en progreso, precisión ni rachas.
+            bumpDaily(this, earned = minutesAwarded)
+        }
+        db.notifyChanged()
     }
 
     override suspend fun answer(
@@ -73,6 +134,15 @@ class StudyRepositoryImpl(
                     ),
                 )
             }
+            // La racha se calcula en la BD (no con el objeto en memoria) para que funcione incluso
+            // si la misma pregunta aparece dos veces en una sesión.
+            execSQL(
+                "UPDATE questions SET times_asked = times_asked + 1, " +
+                    "times_correct = times_correct + ?, " +
+                    "correct_streak = CASE WHEN ? = 1 THEN correct_streak + 1 ELSE 0 END " +
+                    "WHERE id=?",
+                arrayOf<Any?>(if (correct) 1 else 0, if (correct) 1 else 0, question.id),
+            )
             bumpDaily(this, questions = 1, correct = if (correct) 1 else 0)
         }
         db.notifyChanged()
@@ -110,14 +180,31 @@ class StudyRepositoryImpl(
         )
     }
 
-    private fun pickQuestions(orderedTopics: List<Topic>, count: Int): List<Question> {
+    /**
+     * Elige preguntas respetando la progresión: un nivel solo se ofrece cuando la estadística de
+     * una pregunta anterior del mismo tema ya alcanzó [QuestionProgression.CORRECT_TO_UNLOCK]
+     * aciertos. [mixedTiers] se usa en el reto de desbloqueo para mezclar 1 concepto y 1 proceso.
+     */
+    private fun countPracticeQuestions(): Int = db.readableDatabase.count(
+        "SELECT COUNT(DISTINCT q.id) FROM questions q " +
+            "JOIN topics t ON t.id = q.topic_id JOIN options o ON o.question_id = q.id",
+    )
+
+    private fun pickQuestions(
+        orderedTopics: List<Topic>,
+        count: Int,
+        mixedTiers: Boolean,
+        ignoreProgression: Boolean = false,
+    ): List<Question> {
         if (orderedTopics.isEmpty() || count <= 0) return emptyList()
         val ids = orderedTopics.map { it.id }
         val placeholders = ids.joinToString(",") { "?" }
         val rows = db.readableDatabase.list(
             """
             SELECT q.id AS id, q.topic_id AS topic_id, t.course_id AS course_id,
-                   q.prompt AS prompt, q.explanation AS explanation, q.difficulty AS difficulty
+                   q.prompt AS prompt, q.explanation AS explanation, q.difficulty AS difficulty,
+                   q.tier AS tier, q.concept_key AS concept_key, q.times_asked AS times_asked,
+                   q.times_correct AS times_correct, q.correct_streak AS correct_streak
             FROM questions q
             JOIN topics t ON t.id = q.topic_id
             WHERE q.topic_id IN ($placeholders)
@@ -131,20 +218,65 @@ class StudyRepositoryImpl(
                 prompt = c.str("prompt"),
                 explanation = c.str("explanation"),
                 difficulty = c.i("difficulty"),
+                tier = runCatching { QuestionTier.valueOf(c.str("tier")) }
+                    .getOrDefault(QuestionTier.CONCEPTO),
+                conceptKey = c.str("concept_key"),
+                timesAsked = c.i("times_asked"),
+                timesCorrect = c.i("times_correct"),
+                correctStreak = c.i("correct_streak"),
             )
         }
         if (rows.isEmpty()) return emptyList()
 
-        val byTopic = rows.groupBy { it.topicId }.mapValues { (_, value) -> value.shuffled() }
+        val unlocked = rows.groupBy { it.topicId }.mapValues { (_, group) ->
+            QuestionProgression.unlockedTiers(group.map { row ->
+                QuestionProgress(
+                    tier = row.tier,
+                    conceptKey = row.conceptKey,
+                    timesAsked = row.timesAsked,
+                    timesCorrect = row.timesCorrect,
+                    correctStreak = row.correctStreak,
+                )
+            })
+        }
+        val allowed = if (ignoreProgression) {
+            rows
+        } else {
+            rows.filter { row -> row.tier in unlocked[row.topicId].orEmpty() }
+        }
+        val byTopic = allowed.groupBy { it.topicId }.mapValues { (_, group) ->
+            TIER_ORDER.associateWith { tier ->
+                group.filter { it.tier == tier }.shuffled()
+            }
+        }
+
         val selected = mutableListOf<QuestionRow>()
+        val chosenIds = HashSet<String>()
         var round = 0
         while (selected.size < count && round < 8) {
             var added = false
-            for (topic in orderedTopics) {
-                val row = byTopic[topic.id]?.getOrNull(round) ?: continue
-                selected += row
-                added = true
-                if (selected.size == count) break
+            if (mixedTiers) {
+                for (tier in TIER_ORDER) {
+                    for (topic in orderedTopics) {
+                        val row = byTopic[topic.id]?.get(tier)?.getOrNull(round) ?: continue
+                        if (!chosenIds.add(row.id)) continue
+                        selected += row
+                        added = true
+                        if (selected.size == count) break
+                    }
+                    if (selected.size == count) break
+                }
+            } else {
+                for (topic in orderedTopics) {
+                    for (tier in TIER_ORDER) {
+                        val row = byTopic[topic.id]?.get(tier)?.getOrNull(round) ?: continue
+                        if (!chosenIds.add(row.id)) continue
+                        selected += row
+                        added = true
+                        if (selected.size == count) break
+                    }
+                    if (selected.size == count) break
+                }
             }
             if (!added) break
             round++
@@ -179,6 +311,11 @@ class StudyRepositoryImpl(
                 explanation = row.explanation,
                 difficulty = row.difficulty,
                 options = opts,
+                tier = row.tier,
+                conceptKey = row.conceptKey,
+                timesAsked = row.timesAsked,
+                timesCorrect = row.timesCorrect,
+                correctStreak = row.correctStreak,
             )
         }
     }
@@ -207,6 +344,10 @@ class StudyRepositoryImpl(
         repStreak = i("rep_streak"),
         lastReviewAt = l("last_review_at"),
     )
+
+    private companion object {
+        val TIER_ORDER = listOf(QuestionTier.CONCEPTO, QuestionTier.PROCESO, QuestionTier.GENERAL)
+    }
 }
 
 internal fun insertMinuteTx(db: SQLiteDatabase, minutes: Int, kind: String, note: String, now: Long) {
