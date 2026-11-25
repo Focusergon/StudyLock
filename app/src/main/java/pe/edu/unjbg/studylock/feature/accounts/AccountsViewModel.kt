@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import pe.edu.unjbg.studylock.core.log.StudyLockLog
 import pe.edu.unjbg.studylock.core.text.PdfTextExtractor
 import pe.edu.unjbg.studylock.data.auth.CredentialStore
 import pe.edu.unjbg.studylock.data.auth.UnjbgCredentials
@@ -64,6 +65,8 @@ data class AccountsUi(
     val syncTotal: Int = 0,
     /** El portal pide intervención: la UI muestra «Ya terminé el ingreso». */
     val manualLoginNeeded: Boolean = false,
+    /** El WebView no pudo crearse: se reintentará en la próxima sincronización. */
+    val browserFailed: Boolean = false,
 ) {
     /** Se exige el Aula Virtual; la Intranet se deriva de ella si se marca «misma contraseña». */
     val canSave: Boolean
@@ -117,19 +120,25 @@ class AccountsViewModel(
 
     init {
         viewModelScope.launch {
-            val stored = credentials.current()
-            _ui.update {
-                it.copy(
-                    loaded = true,
-                    aulaUser = stored.aulaUser,
-                    aulaPassword = stored.aulaPassword,
-                    intranetUser = stored.intranetUser,
-                    intranetPassword = stored.intranetPassword,
-                    samePassword = stored.samePassword,
-                    aulaUrl = stored.aulaUrl.ifBlank { AccountsDefaults.AULA_URL },
-                    intranetUrl = stored.intranetUrl.ifBlank { AccountsDefaults.INTRANET_URL },
-                )
-            }
+            runCatching { credentials.current() }
+                .onSuccess { stored ->
+                    _ui.update {
+                        it.copy(
+                            loaded = true,
+                            aulaUser = stored.aulaUser,
+                            aulaPassword = stored.aulaPassword,
+                            intranetUser = stored.intranetUser,
+                            intranetPassword = stored.intranetPassword,
+                            samePassword = stored.samePassword,
+                            aulaUrl = stored.aulaUrl.ifBlank { AccountsDefaults.AULA_URL },
+                            intranetUrl = stored.intranetUrl.ifBlank { AccountsDefaults.INTRANET_URL },
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    StudyLockLog.error("Cuentas", error, "No se pudieron leer las credenciales guardadas")
+                    _ui.update { it.copy(loaded = true) }
+                }
         }
     }
 
@@ -138,6 +147,7 @@ class AccountsViewModel(
     /** La UI (panel fijo en la raíz) entrega el WebView ya creado. */
     fun attachSession(webSession: UnjbgWebSession) {
         session = webSession
+        StudyLockLog.log("Navegador", "Sesión WebView lista")
         if (!sessionReady.isCompleted) sessionReady.complete(webSession)
     }
 
@@ -153,6 +163,21 @@ class AccountsViewModel(
     private fun prepareSession() {
         sessionReady = CompletableDeferred()
         session?.let { sessionReady.complete(it) }
+    }
+
+    /** El WebView no pudo crearse: se registra, se cancela y se permite reintentar después. */
+    fun reportBrowserFailure(message: String) {
+        StudyLockLog.error("Navegador", IllegalStateException(message))
+        cancelSync()
+        _ui.update {
+            it.copy(
+                error = message,
+                syncing = false,
+                browserVisible = false,
+                browserFailed = true,
+                status = "",
+            )
+        }
     }
 
     // --- Edición de credenciales -------------------------------------------
@@ -222,6 +247,7 @@ class AccountsViewModel(
                 notices = emptyList(),
                 showLinks = false,
                 manualLoginNeeded = false,
+                browserFailed = false,
                 syncPhase = "Preparando",
                 syncDone = 0,
                 syncTotal = 0,
@@ -230,6 +256,7 @@ class AccountsViewModel(
             )
         }
 
+        StudyLockLog.log("Cuentas", "Sincronización iniciada")
         syncJob = viewModelScope.launch {
             val creds = currentCredentials()
             runCatching { credentials.save(creds) }
@@ -312,6 +339,7 @@ class AccountsViewModel(
                 // Cancelación del usuario: el estado ya lo dejó cancelSync().
                 throw e
             } catch (e: Exception) {
+                StudyLockLog.error("Cuentas", e, "Fallo durante la sincronización")
                 _ui.update {
                     it.copy(
                         syncing = false,

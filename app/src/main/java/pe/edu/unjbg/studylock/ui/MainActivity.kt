@@ -33,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import pe.edu.unjbg.studylock.StudyLockApp
 import pe.edu.unjbg.studylock.core.designsystem.SlColors
 import pe.edu.unjbg.studylock.core.designsystem.StudyLockTheme
+import pe.edu.unjbg.studylock.core.log.StudyLockLog
 import pe.edu.unjbg.studylock.core.util.PermissionUtils
 import pe.edu.unjbg.studylock.navigation.StudyLockRoot
 
@@ -42,6 +43,7 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        StudyLockLog.log("App", "MainActivity.onCreate")
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
@@ -61,7 +63,11 @@ class MainActivity : ComponentActivity() {
                     if (loaded == null) {
                         SplashScreen()
                     } else {
-                        val startOnboarding = remember { !loaded.onboardingDone }
+                        val startOnboarding = remember {
+                            val value = !loaded.onboardingDone
+                            StudyLockLog.log("App", "Preferencias listas, onboarding=$value")
+                            value
+                        }
                         StudyLockRoot(graph = graph, startOnboarding = startOnboarding)
                     }
                 }

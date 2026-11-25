@@ -71,7 +71,7 @@ import pe.edu.unjbg.studylock.core.util.PermissionUtils
 import pe.edu.unjbg.studylock.ui.rememberPermissionStatus
 
 @Composable
-fun WelcomeScreen(onStart: () -> Unit, onConnect: () -> Unit) {
+fun WelcomeScreen(onStart: () -> Unit, onConnect: () -> Unit, onLogs: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -139,6 +139,12 @@ fun WelcomeScreen(onStart: () -> Unit, onConnect: () -> Unit) {
             SlTextButton(
                 text = "Ya tengo cuenta",
                 onClick = onConnect,
+                modifier = Modifier.fillMaxWidth(),
+                color = SlColors.SubtleText,
+            )
+            SlTextButton(
+                text = "Ver registro de errores",
+                onClick = onLogs,
                 modifier = Modifier.fillMaxWidth(),
                 color = SlColors.SubtleText,
             )

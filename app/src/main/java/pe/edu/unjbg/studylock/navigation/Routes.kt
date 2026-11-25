@@ -30,6 +30,8 @@ object Routes {
     /** 5 preguntas de prueba desde el inicio: minutos extra, sin estadísticas. */
     const val PRACTICE = "session/practice"
     const val ACCESS_ACTIVE = "access_active"
+    /** Visor de errores dentro de la app, para copiarlos sin cable. */
+    const val LOGS = "logs"
 
     /** Identificador especial: repaso adaptativo entre todos los cursos. */
     const val WEAK = "weak"

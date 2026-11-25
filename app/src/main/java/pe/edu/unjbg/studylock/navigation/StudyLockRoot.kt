@@ -20,6 +20,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import pe.edu.unjbg.studylock.core.designsystem.SlBottomBar
 import pe.edu.unjbg.studylock.core.designsystem.SlColors
+import pe.edu.unjbg.studylock.core.log.StudyLockLog
 import pe.edu.unjbg.studylock.di.AppGraph
 import pe.edu.unjbg.studylock.feature.access.AccessActiveScreen
 import pe.edu.unjbg.studylock.feature.accounts.AccountsScreen
@@ -31,6 +32,7 @@ import pe.edu.unjbg.studylock.feature.courses.CoursesViewModel
 import pe.edu.unjbg.studylock.feature.home.HomeScreen
 import pe.edu.unjbg.studylock.feature.home.HomeViewModel
 import pe.edu.unjbg.studylock.feature.guide.GuideScreen
+import pe.edu.unjbg.studylock.feature.logs.LogViewerScreen
 import pe.edu.unjbg.studylock.feature.import.ImportScreen
 import pe.edu.unjbg.studylock.feature.import.ImportViewModel
 import pe.edu.unjbg.studylock.feature.onboarding.AppSelectionScreen
@@ -56,6 +58,8 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     val showBar = currentRoute in Routes.tabRoutes
+
+    LaunchedEffect(Unit) { StudyLockLog.log("App", "Interfaz iniciada") }
 
     // Auto-sync: una vez al día al abrir, con credenciales guardadas y (por defecto) solo Wi-Fi.
     // Se marca el intento antes de navegar para no repetirlo en cada recomposición.
@@ -113,6 +117,7 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                 WelcomeScreen(
                     onStart = { nav.navigate(Routes.ACCOUNT) },
                     onConnect = { nav.navigate(Routes.RETURNING) },
+                    onLogs = { nav.navigate(Routes.LOGS) },
                 )
             }
 
@@ -301,6 +306,7 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
                     onAccounts = { nav.navigate(Routes.ACCOUNTS) },
                     onSchedule = { nav.navigate(Routes.SCHEDULE) },
                     onBlockedApps = { nav.navigate(Routes.BLOCKED_APPS) },
+                    onLogs = { nav.navigate(Routes.LOGS) },
                     onResetOnboarding = {
                         nav.navigate(Routes.WELCOME) {
                             popUpTo(Routes.HOME) { inclusive = true }
@@ -312,6 +318,10 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
 
             composable(Routes.ACCESS_ACTIVE) {
                 AccessActiveScreen(onClose = { nav.popBackStack() })
+            }
+
+            composable(Routes.LOGS) {
+                LogViewerScreen(onBack = { nav.popBackStack() })
             }
             }
             SyncBrowserHost(graph.accounts)

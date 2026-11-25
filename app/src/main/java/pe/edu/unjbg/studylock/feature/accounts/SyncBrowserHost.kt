@@ -1,7 +1,9 @@
 package pe.edu.unjbg.studylock.feature.accounts
 
 import android.annotation.SuppressLint
+import android.view.View
 import android.webkit.WebView
+import android.widget.FrameLayout
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,7 +15,11 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -22,19 +28,29 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import pe.edu.unjbg.studylock.core.designsystem.SlCard
 import pe.edu.unjbg.studylock.core.designsystem.SlColors
 import pe.edu.unjbg.studylock.core.designsystem.SlTextButton
+import pe.edu.unjbg.studylock.core.log.StudyLockLog
 import pe.edu.unjbg.studylock.data.web.UnjbgWebSession
 
 /**
  * Mini-navegador fijo en la raíz de la app.
  *
- * A diferencia del panel anterior, este composable **no se desmonta al cambiar de ruta**: el WebView
- * se crea una sola vez y permanece attached aunque el usuario vaya al Inicio, Cursos o Ajustes.
- * Por eso la sincronización sigue avanzando y el árbol parcial se puede ver desde cualquier sitio.
+ * El WebView **no se crea al abrir la app**: se construye la primera vez que se sincroniza y luego
+ * permanece montado (a 1 dp cuando no se usa), para que navegar a otras pantallas no lo destruya.
+ * Si el dispositivo no puede crear un WebView, se registra el fallo y se muestra en el visor de
+ * errores en vez de dejar la pantalla en blanco.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun SyncBrowserHost(controller: AccountsViewModel) {
     val ui by controller.ui.collectAsStateWithLifecycle()
+    var browserCreated by remember { mutableStateOf(false) }
+
+    LaunchedEffect(ui.syncing, ui.browserFailed) {
+        when {
+            ui.browserFailed -> browserCreated = false
+            ui.syncing -> browserCreated = true
+        }
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         if (ui.syncing) {
@@ -75,25 +91,34 @@ fun SyncBrowserHost(controller: AccountsViewModel) {
             }
         }
 
-        // Se mantiene siempre en la composición (altura 0 cuando no sincroniza) para no destruirlo.
-        AndroidView(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(
-                    when {
-                        ui.manualLoginNeeded -> 260.dp
-                        ui.syncing -> 150.dp
-                        else -> 1.dp
-                    },
-                ),
-            factory = { context ->
-                WebView(context).also { web ->
-                    controller.attachSession(UnjbgWebSession(web))
-                }
-            },
-            update = { web ->
-                if (!ui.syncing) runCatching { web.stopLoading() }
-            },
-        )
+        if (browserCreated) {
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(
+                        when {
+                            ui.manualLoginNeeded -> 260.dp
+                            ui.syncing -> 150.dp
+                            else -> 1.dp
+                        },
+                    ),
+                factory = { context ->
+                    runCatching<View> {
+                        WebView(context).also { web ->
+                            controller.attachSession(UnjbgWebSession(web))
+                            StudyLockLog.log("Navegador", "WebView creado")
+                        }
+                    }.getOrElse { error ->
+                        controller.reportBrowserFailure(
+                            "No se pudo crear el mini-navegador en este dispositivo: ${error.message}",
+                        )
+                        FrameLayout(context)
+                    }
+                },
+                update = { view ->
+                    if (view is WebView && !ui.syncing) runCatching { view.stopLoading() }
+                },
+            )
+        }
     }
 }

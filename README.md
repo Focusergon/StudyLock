@@ -15,14 +15,14 @@ se descuentan solo mientras usas esa app.
 > **[docs/INSTALACION.md](docs/INSTALACION.md)** (requisitos, instalación y solución de errores
 > como «App no instalada» o «configuración restringida» de accesibilidad en Android 13+).
 
-> **Beta actual: `v0.3.0-beta.2` (APK firmado, `versionCode 4`).** Se instala directamente sobre
-> `v0.3.0-beta.1` sin desinstalar y conserva cursos, minutos y preferencias. Esta beta corrige el
-> flujo **«Ya tengo cuenta»** (ahora solo pide el correo y no repite permisos, apps ni credenciales)
-> y la **sincronización UNJBG**: el mini-navegador ya no se destruye al salir de la pantalla, el
-> árbol se ve por partes mientras busca, hay progreso, botón «Ya terminé el ingreso» y Cancelar,
-> y los timeouts son más cortos. El servidor con mapa del árbol sigue diferido hasta terminar el MVP.
-> El asset del modelo local (`model-gemma3-270m`) aún debe publicarse para que el botón de descarga
-> funcione.
+> **Beta actual: `v0.3.0-beta.3` (APK firmado, `versionCode 5`).** Se instala directamente sobre
+> `v0.3.0-beta.2` sin desinstalar y conserva cursos, minutos y preferencias. Corrige la pantalla en
+> blanco de la beta.2: el WebView ahora se crea solo cuando se sincroniza y un fallo se registra en
+> vez de tumbar la app. Incluye además **Ajustes → Registro de errores**, donde puedes ver, copiar
+> y compartir los fallos desde el celular, sin cable. Mantiene el flujo **«Ya tengo cuenta»** corto
+> y la sincronización persistente con árbol parcial, progreso, ingreso manual y Cancelar. El servidor
+> con mapa del árbol sigue diferido hasta terminar el MVP. El asset del modelo local
+> (`model-gemma3-270m`) aún debe publicarse para que el botón de descarga funcione.
 
 ---
 

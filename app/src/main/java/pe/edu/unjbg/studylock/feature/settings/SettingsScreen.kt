@@ -54,7 +54,15 @@ import pe.edu.unjbg.studylock.data.ai.ModelStatus
 import pe.edu.unjbg.studylock.ui.rememberPermissionStatus
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onAccounts: () -> Unit, onSchedule: () -> Unit, onBlockedApps: () -> Unit, onResetOnboarding: () -> Unit) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel,
+    onImport: () -> Unit,
+    onAccounts: () -> Unit,
+    onSchedule: () -> Unit,
+    onBlockedApps: () -> Unit,
+    onLogs: () -> Unit,
+    onResetOnboarding: () -> Unit,
+) {
     val context = LocalContext.current
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val permissions = rememberPermissionStatus(ui.prefs.restrictedPermissionAcknowledged)
@@ -462,6 +470,37 @@ fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onAccount
             }
 
             item {
+                SlCard(onClick = onLogs) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SlIconBadge(
+                            icon = Icons.Filled.QueryStats,
+                            tint = SlColors.Primary,
+                            background = SlColors.ChipBlue,
+                            size = 38.dp,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Registro de errores",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = SlColors.Ink,
+                            )
+                            Text(
+                                text = "Si algo falla, abre aquí y copia todo para enviarlo.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlColors.Muted,
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = SlColors.Muted,
+                        )
+                    }
+                }
+            }
+
+            item {
                 SlCard {
                     Text(
                         text = "Volver a ver el onboarding",
@@ -489,7 +528,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onImport: () -> Unit, onAccount
                         .padding(vertical = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("StudyLock 0.3.0-beta.2", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
+                    Text("StudyLock 0.3.0-beta.3", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
                     Text(
                         "Hecho para estudiantes de la UNJBG",
                         style = MaterialTheme.typography.bodySmall,
