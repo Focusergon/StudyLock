@@ -30,9 +30,11 @@ se descuentan solo mientras usas esa app.
 > errores, el timeout de JavaScript (4 s), el vigilante de 6 minutos, el árbol parcial y el flujo
 > «Ya tengo cuenta». El servidor con mapa del árbol sigue diferido hasta terminar el MVP.
 >
-> El asset del modelo (`model-gemma3-270m`) queda pendiente de publicar tras aceptar los términos
-> de Gemma en Hugging Face; la app ya está preparada para descargarlo y verificarlo sin cambiar de
-> versión.
+> El modelo ya está publicado en
+> [`model-gemma3-270m`](https://github.com/Focusergon/StudyLock/releases/tag/model-gemma3-270m):
+> `gemma3-270m-it-q8.litertlm`, 304005120 bytes, SHA-256
+> `757e9119fa5bd667a2774fb470ac4afcd3190a21c677f8e69a5d6bc908abdd63`, con atribución a Google
+> DeepMind y los términos de Gemma. La app lo descarga y verifica sin cambiar de versión.
 
 ---
 
@@ -325,9 +327,9 @@ para la comunidad UNJBG. `isAccessibilityTool="false"` está declarado en la con
   escaneados ni fuentes CID (requerirían OCR).
 - El generador determinista es el respaldo; la IA local solo se usa si el modelo fue descargado y
   sus respuestas pasan todas las validaciones. Su calidad todavía no se ha probado en un dispositivo real.
-- El Release `model-gemma3-270m` debe publicarse con el archivo `gemma3-270m-it-q8.litertlm` para
-  que la descarga automática y el botón «Descargar / Reintentar» funcionen. El binario no se incluye
-  en el repositorio y requiere aceptar los términos de Gemma en Hugging Face.
+- El Release `model-gemma3-270m` ya contiene `gemma3-270m-it-q8.litertlm` (304005120 bytes,
+  SHA-256 `757e9119fa5bd667a2774fb470ac4afcd3190a21c677f8e69a5d6bc908abdd63`) con atribución a
+  Google DeepMind y los términos de Gemma. El binario no se incluye en el repositorio.
 - El descubrimiento de contenido es **heurístico** (recorre enlaces del mismo sitio que parecen
   secciones): si el campus cambia de estructura pueden aparecer menos archivos; hay respaldo de
   inicio de sesión manual en la propia ventana si la web pide intervención.
