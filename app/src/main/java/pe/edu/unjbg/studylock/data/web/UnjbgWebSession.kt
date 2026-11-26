@@ -23,6 +23,8 @@ data class WebLink(
     val href: String,
     /** Origen del enlace: `a`, `routerLink`, `data-url`, `onclick` o `button`. */
     val kind: String = "a",
+    /** Texto del contenedor cercano; ayuda a clasificar enlaces con texto genérico («Ver». */
+    val context: String = "",
 )
 
 /** Respuesta de una petición `fetch` hecha dentro de la sesión del WebView. */
@@ -96,7 +98,12 @@ class UnjbgWebSession(private val webView: WebView) {
             (0 until array.length()).mapNotNull { index ->
                 val obj = array.optJSONObject(index) ?: return@mapNotNull null
                 val href = obj.optString("h")
-                if (href.isBlank()) null else WebLink(obj.optString("t"), href, obj.optString("k", "a"))
+                if (href.isBlank()) null else WebLink(
+                    text = obj.optString("t"),
+                    href = href,
+                    kind = obj.optString("k", "a"),
+                    context = obj.optString("c", ""),
+                )
             }
         }.getOrDefault(emptyList())
     }

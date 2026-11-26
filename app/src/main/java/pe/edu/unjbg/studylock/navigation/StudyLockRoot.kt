@@ -21,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import pe.edu.unjbg.studylock.core.designsystem.SlBottomBar
 import pe.edu.unjbg.studylock.core.designsystem.SlColors
 import pe.edu.unjbg.studylock.core.log.StudyLockLog
+import pe.edu.unjbg.studylock.data.ai.ModelStatus
 import pe.edu.unjbg.studylock.di.AppGraph
 import pe.edu.unjbg.studylock.feature.access.AccessActiveScreen
 import pe.edu.unjbg.studylock.feature.accounts.AccountsScreen
@@ -61,18 +62,25 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
 
     LaunchedEffect(Unit) { StudyLockLog.log("App", "Interfaz iniciada") }
 
-    // Auto-sync: una vez al día al abrir, con credenciales guardadas y (por defecto) solo Wi-Fi.
-    // Se marca el intento antes de navegar para no repetirlo en cada recomposición.
+    // Auto-sync: se dispara cuando el modelo ya está verificado (descarga en segundo plano) y
+    // existen credenciales del Aula y la Intranet. Una vez al día y, por defecto, solo por Wi-Fi.
     LaunchedEffect(Unit) {
         if (startOnboarding) return@LaunchedEffect
-        val current = graph.prefs.current()
-        if (!current.autoSync) return@LaunchedEffect
-        if (current.autoSyncWifiOnly && !graph.network.isWifi()) return@LaunchedEffect
-        if (!graph.credentials.current().hasAula) return@LaunchedEffect
-        val now = System.currentTimeMillis()
-        if (now - current.lastAutoSyncAt < 24L * 60 * 60 * 1_000) return@LaunchedEffect
-        graph.prefs.markAutoSyncAttempt(now)
-        nav.navigate(Routes.accounts(autoSync = true))
+        var launched = false
+        graph.modelDownloader.stateFlow.collect { modelState ->
+            if (launched || modelState.status != ModelStatus.READY) return@collect
+            val current = graph.prefs.current()
+            val credentials = graph.credentials.current()
+            if (!current.autoSync) return@collect
+            if (current.autoSyncWifiOnly && !graph.network.isWifi()) return@collect
+            if (!credentials.hasAula || !credentials.hasIntranet) return@collect
+            val now = System.currentTimeMillis()
+            if (now - current.lastAutoSyncAt < 24L * 60 * 60 * 1_000) return@collect
+            launched = true
+            StudyLockLog.log("Auto-sync", "Modelo listo y credenciales completas: iniciando vinculación")
+            graph.prefs.markAutoSyncAttempt(now)
+            nav.navigate(Routes.accounts(autoSync = true))
+        }
     }
 
     fun navigateTab(target: String) {
@@ -298,7 +306,13 @@ fun StudyLockRoot(graph: AppGraph, startOnboarding: Boolean) {
 
             composable(Routes.SETTINGS) {
                 val vm: SettingsViewModel = viewModel(
-                    factory = viewModelFactory { SettingsViewModel(graph.prefs, graph.modelDownloader) },
+                    factory = viewModelFactory {
+                        SettingsViewModel(
+                            prefs = graph.prefs,
+                            downloader = graph.modelDownloader,
+                            requestDownload = { graph.startModelDownload(force = true) },
+                        )
+                    },
                 )
                 SettingsScreen(
                     viewModel = vm,

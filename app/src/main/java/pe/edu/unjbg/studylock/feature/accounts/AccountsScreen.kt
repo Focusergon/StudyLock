@@ -148,6 +148,28 @@ fun AccountsScreen(viewModel: AccountsViewModel, onBack: () -> Unit) {
                                 )
                                 Spacer(Modifier.height(6.dp))
                             }
+                            if (ui.classifiedLinks.isNotEmpty()) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "Clasificación: ${ui.classifiedLinks.size} enlace(s)",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = SlColors.Ink,
+                                )
+                                ui.classifiedLinks.take(60).forEach { verdict ->
+                                    Text(
+                                        text = "[${verdict.role.name}] ${verdict.label.take(90)} · " +
+                                            "${verdict.source.name} ${verdict.confidence}%",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = SlColors.Ink,
+                                    )
+                                    Text(
+                                        text = verdict.reason.take(140),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = SlColors.Muted,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                }
+                            }
                         }
                     }
                 }

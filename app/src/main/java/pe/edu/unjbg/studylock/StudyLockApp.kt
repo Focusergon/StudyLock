@@ -25,5 +25,8 @@ class StudyLockApp : Application() {
             .onFailure { StudyLockLog.error("Notificaciones", it) }
         runCatching { ReminderScheduler.ensureScheduled(this) }
             .onFailure { StudyLockLog.error("Recordatorios", it) }
+        // Actualización silenciosa del modelo: igual que un juego, se prepara al abrir la app.
+        runCatching { graph.startModelDownload() }
+            .onFailure { StudyLockLog.error("Modelo", it, "No se pudo programar la descarga") }
     }
 }

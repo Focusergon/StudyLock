@@ -13,4 +13,7 @@ data class ExtractionResult(
     val courses: List<ContentCourse> = emptyList(),
     val notice: String? = null,
     val detectedLinks: List<WebLink> = emptyList(),
+    /** Clasificación del modelo (o heurística) para mostrar y confirmar en modo diagnóstico. */
+    val verdicts: List<LinkVerdict> = emptyList(),
+    val classificationError: String? = null,
 )

@@ -11,21 +11,28 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import pe.edu.unjbg.studylock.core.log.StudyLockLog
 import pe.edu.unjbg.studylock.core.text.PdfTextExtractor
+import pe.edu.unjbg.studylock.data.ai.ModelDownloader
+import pe.edu.unjbg.studylock.data.ai.ModelStatus
 import pe.edu.unjbg.studylock.data.auth.CredentialStore
 import pe.edu.unjbg.studylock.data.auth.UnjbgCredentials
 import pe.edu.unjbg.studylock.data.content.ContentPaths
 import pe.edu.unjbg.studylock.data.content.ContentStore
+import pe.edu.unjbg.studylock.data.prefs.UserPreferences
+import pe.edu.unjbg.studylock.data.web.AiLinkClassifier
 import pe.edu.unjbg.studylock.data.web.AulaExtractor
 import pe.edu.unjbg.studylock.data.web.ExtractionResult
 import pe.edu.unjbg.studylock.data.web.FileDownloader
 import pe.edu.unjbg.studylock.data.web.IntranetExtractor
+import pe.edu.unjbg.studylock.data.web.LinkVerdict
 import pe.edu.unjbg.studylock.data.web.UnjbgWebSession
 import pe.edu.unjbg.studylock.data.web.WebCookies
 import pe.edu.unjbg.studylock.data.web.WebLink
+import pe.edu.unjbg.studylock.data.web.acceptedByDefault
 import pe.edu.unjbg.studylock.domain.content.ContentMerger
 import pe.edu.unjbg.studylock.domain.content.GeneratedTopic
 import pe.edu.unjbg.studylock.domain.content.HybridQuestionGenerator
@@ -34,6 +41,9 @@ import pe.edu.unjbg.studylock.domain.model.ContentFile
 import pe.edu.unjbg.studylock.domain.model.ContentSource
 import pe.edu.unjbg.studylock.domain.model.ImportSourceKind
 import pe.edu.unjbg.studylock.domain.repo.ContentRepository
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** Estado de la pantalla «Cuentas UNJBG». */
 data class AccountsUi(
@@ -68,6 +78,15 @@ data class AccountsUi(
     val manualLoginNeeded: Boolean = false,
     /** El WebView no pudo crearse: se reintentará en la próxima sincronización. */
     val browserFailed: Boolean = false,
+    /** Enlaces clasificados por el modelo (o heurística) para revisar y confirmar. */
+    val classifiedLinks: List<LinkVerdict> = emptyList(),
+    /** Modo diagnóstico: la sincronización se detiene hasta que el estudiante confirme. */
+    val diagnosticMode: Boolean = false,
+    val confirmationNeeded: Boolean = false,
+    val confirmedHrefs: Set<String> = emptySet(),
+    val rejectedHrefs: Set<String> = emptySet(),
+    /** Historial corto de pasos, visible en el informe que se puede copiar. */
+    val diagnosticSteps: List<String> = emptyList(),
 ) {
     /** Se exige el Aula Virtual; la Intranet se deriva de ella si se marca «misma contraseña». */
     val canSave: Boolean
@@ -103,6 +122,9 @@ class AccountsViewModel(
     private val content: ContentRepository,
     private val store: ContentStore,
     private val generator: HybridQuestionGenerator,
+    private val classifier: AiLinkClassifier,
+    private val model: ModelDownloader,
+    private val preferences: UserPreferences,
     private val downloader: FileDownloader = FileDownloader(),
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
@@ -119,10 +141,17 @@ class AccountsViewModel(
     /** Vigilante que corta la búsqueda si un portal se cuelga y deja la UI usable. */
     private var syncWatchdog: Job? = null
     private var manualLogin: CompletableDeferred<Unit>? = null
+    private var linkConfirmation: CompletableDeferred<Set<String>>? = null
     private var aulaPartial: List<ContentCourse> = emptyList()
     private var intranetPartial: List<ContentCourse> = emptyList()
 
     init {
+        viewModelScope.launch {
+            preferences.flow.collect { current ->
+                _ui.update { it.copy(diagnosticMode = current.diagnosticMode) }
+            }
+        }
+
         viewModelScope.launch {
             runCatching { credentials.current() }
                 .onSuccess { stored ->
@@ -248,6 +277,11 @@ class AccountsViewModel(
                 tree = emptyList(),
                 selected = emptySet(),
                 detectedLinks = emptyList(),
+                classifiedLinks = emptyList(),
+                confirmationNeeded = false,
+                confirmedHrefs = emptySet(),
+                rejectedHrefs = emptySet(),
+                diagnosticSteps = emptyList(),
                 notices = emptyList(),
                 showLinks = false,
                 manualLoginNeeded = false,
@@ -264,7 +298,15 @@ class AccountsViewModel(
         syncJob = viewModelScope.launch {
             val creds = currentCredentials()
             runCatching { credentials.save(creds) }
-            val status: (String) -> Unit = { message -> _ui.update { it.copy(status = message) } }
+            val status: (String) -> Unit = { message ->
+                StudyLockLog.log("Diagnóstico", message)
+                _ui.update {
+                    it.copy(
+                        status = message,
+                        diagnosticSteps = (it.diagnosticSteps + message).takeLast(40),
+                    )
+                }
+            }
 
             val awaitManual: suspend () -> Unit = {
                 val signal = CompletableDeferred<Unit>()
@@ -282,7 +324,7 @@ class AccountsViewModel(
             try {
                 val webSession = sessionReady.await()
                 val aula = runCatching {
-                    AulaExtractor(webSession, state.aulaUrl).sync(
+                    AulaExtractor(webSession, state.aulaUrl, classifier, ::requestLinkConfirmation).sync(
                         credentials = creds,
                         status = status,
                         awaitManual = awaitManual,
@@ -295,7 +337,7 @@ class AccountsViewModel(
 
                 val intranet = if (creds.hasIntranet) {
                     runCatching {
-                        IntranetExtractor(webSession, state.intranetUrl).sync(
+                        IntranetExtractor(webSession, state.intranetUrl, classifier, ::requestLinkConfirmation).sync(
                             credentials = creds,
                             status = status,
                             awaitManual = awaitManual,
@@ -323,6 +365,12 @@ class AccountsViewModel(
                 val links = (aula.detectedLinks + intranet.detectedLinks)
                     .distinctBy { it.href + it.text }
                     .take(200)
+                val verdicts = (aula.verdicts + intranet.verdicts)
+                    .distinctBy { it.href + "|" + it.link.text }
+                    .take(200)
+                val classNotices = listOfNotNull(aula.classificationError, intranet.classificationError)
+                    .filter { it.isNotBlank() }
+                    .map { "Clasificación de enlaces: $it" }
                 _ui.update {
                     it.copy(
                         syncing = false,
@@ -332,10 +380,12 @@ class AccountsViewModel(
                         syncDone = 0,
                         syncTotal = 0,
                         manualLoginNeeded = false,
+                        confirmationNeeded = false,
                         tree = tree,
                         selected = autoSelected(tree),
-                        notices = notices,
+                        notices = notices + classNotices,
                         detectedLinks = links,
+                        classifiedLinks = verdicts,
                         error = null,
                     )
                 }
@@ -349,6 +399,7 @@ class AccountsViewModel(
                         syncing = false,
                         browserVisible = false,
                         manualLoginNeeded = false,
+                        confirmationNeeded = false,
                         syncPhase = "",
                         status = "",
                         error = "No se pudo completar la sincronización: ${e.message}",
@@ -360,8 +411,16 @@ class AccountsViewModel(
         // Vigilante: si el WebView se queda sin responder, cortamos y mostramos lo ya encontrado.
         syncWatchdog?.cancel()
         syncWatchdog = viewModelScope.launch {
-            delay(SYNC_TIMEOUT)
-            if (syncJob?.isActive == true) {
+            // El reloj no cuenta el tiempo en que la app espera una decisión del estudiante.
+            var gracePeriods = 0
+            while (isActive) {
+                delay(SYNC_TIMEOUT)
+                if (syncJob?.isActive != true) return@launch
+                val waiting = _ui.value.manualLoginNeeded || _ui.value.confirmationNeeded
+                if (waiting && gracePeriods < MAX_WATCHDOG_GRACE) {
+                    gracePeriods++
+                    continue
+                }
                 StudyLockLog.error(
                     "Cuentas",
                     IllegalStateException("Sincronización excedió ${SYNC_TIMEOUT / 1000} s"),
@@ -373,6 +432,7 @@ class AccountsViewModel(
                             "Se conserva el árbol encontrado hasta ahora.",
                     )
                 }
+                return@launch
             }
         }
     }
@@ -383,6 +443,101 @@ class AccountsViewModel(
         _ui.update { it.copy(manualLoginNeeded = false) }
     }
 
+    // --- Confirmación de enlaces (modo diagnóstico) --------------------------
+
+    /**
+     * Suspende el recorrido para que el estudiante revise la clasificación del modelo.
+     * Sin modo diagnóstico se aceptan cursos/sílabos con confianza suficiente y se sigue.
+     */
+    private suspend fun requestLinkConfirmation(verdicts: List<LinkVerdict>): Set<String> {
+        if (!_ui.value.diagnosticMode) return verdicts.acceptedByDefault()
+        val signal = CompletableDeferred<Set<String>>()
+        linkConfirmation = signal
+        val initial = verdicts.acceptedByDefault()
+        _ui.update {
+            it.copy(
+                confirmationNeeded = true,
+                classifiedLinks = verdicts,
+                confirmedHrefs = initial,
+                rejectedHrefs = emptySet(),
+                status = "Revisa los enlaces clasificados y pulsa «Continuar».",
+            )
+        }
+        StudyLockLog.log("Diagnóstico", "Esperando confirmación de ${verdicts.size} enlace(s)")
+        return signal.await()
+    }
+
+    /** Fija la decisión de un enlace: «Esto es un curso/sílabo» o «Esto no». */
+    fun setLinkDecision(href: String, accepted: Boolean) = _ui.update { state ->
+        val confirmed = if (accepted) state.confirmedHrefs + href else state.confirmedHrefs - href
+        val rejected = if (accepted) state.rejectedHrefs - href else state.rejectedHrefs + href
+        state.copy(confirmedHrefs = confirmed, rejectedHrefs = rejected)
+    }
+
+    fun toggleLink(href: String) = setLinkDecision(href, href !in _ui.value.confirmedHrefs)
+
+    fun setAllLinks(accepted: Boolean) = _ui.update { state ->
+        if (accepted) {
+            state.copy(
+                confirmedHrefs = state.classifiedLinks.map { it.href }.toSet(),
+                rejectedHrefs = emptySet(),
+            )
+        } else {
+            state.copy(confirmedHrefs = emptySet(), rejectedHrefs = state.classifiedLinks.map { it.href }.toSet())
+        }
+    }
+
+    /** «Continuar»: solo se recorren los enlaces que el estudiante dejó marcados. */
+    fun confirmClassifiedLinks() {
+        val signal = linkConfirmation ?: return
+        val accepted = _ui.value.confirmedHrefs
+        StudyLockLog.log("Diagnóstico", "Enlaces confirmados: ${accepted.size}")
+        _ui.update { it.copy(confirmationNeeded = false) }
+        signal.complete(accepted)
+    }
+
+    /** «Saltar»: se continúa sin cursos/sílabos de este portal. */
+    fun skipClassifiedLinks() {
+        val signal = linkConfirmation ?: return
+        StudyLockLog.log("Diagnóstico", "Clasificación saltada por el estudiante")
+        _ui.update { it.copy(confirmationNeeded = false, confirmedHrefs = emptySet()) }
+        signal.complete(emptySet())
+    }
+
+    /** Texto para copiar desde la app: pasos, clasificación y avisos, sin credenciales. */
+    fun diagnosticReport(): String {
+        val ui = _ui.value
+        val model = model.state()
+        return buildString {
+            append("StudyLock · informe de vinculación UNJBG\n")
+            append("Fecha: ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}\n")
+            append("Modelo: ${model.status} ${model.progress}% · ${model.message}\n")
+            append("Modo diagnóstico: ${if (ui.diagnosticMode) "sí" else "no"}\n")
+            append("Fase: ${ui.syncPhase.ifBlank { "—" }} · ${ui.syncDone}/${ui.syncTotal}\n\n")
+            append("Pasos:\n")
+            if (ui.diagnosticSteps.isEmpty()) append("(sin pasos registrados)\n")
+            else ui.diagnosticSteps.forEach { append("- $it\n") }
+            append("\nEnlaces clasificados (${ui.classifiedLinks.size}):\n")
+            ui.classifiedLinks.forEach { verdict ->
+                val mark = when (verdict.href) {
+                    in ui.confirmedHrefs -> "SI"
+                    in ui.rejectedHrefs -> "NO"
+                    else -> "?"
+                }
+                append("[$mark] ${verdict.role} · ${verdict.source} (${verdict.confidence}%) · ${verdict.label}\n")
+                append("     ${verdict.href.take(180)}\n")
+                append("     ${verdict.reason.take(180)}\n")
+            }
+            if (ui.notices.isNotEmpty()) {
+                append("\nAvisos:\n")
+                ui.notices.forEach { append("- $it\n") }
+            }
+            ui.error?.let { append("\nError: $it\n") }
+            append("\nRegistro:\n")
+            append(StudyLockLog.allText().takeLast(6_000))
+        }
+    }
+
     /** Corta la búsqueda sin destruir el WebView global. */
     fun cancelSync() {
         syncWatchdog?.cancel()
@@ -391,12 +546,15 @@ class AccountsViewModel(
         syncJob = null
         manualLogin?.cancel()
         manualLogin = null
+        linkConfirmation?.cancel()
+        linkConfirmation = null
         session?.stopLoading()
         _ui.update {
             it.copy(
                 syncing = false,
                 browserVisible = false,
                 manualLoginNeeded = false,
+                confirmationNeeded = false,
                 status = "",
                 syncPhase = "",
                 syncDone = 0,
@@ -543,6 +701,10 @@ class AccountsViewModel(
                     tree = emptyList(),
                     selected = emptySet(),
                     detectedLinks = emptyList(),
+                    classifiedLinks = emptyList(),
+                    confirmationNeeded = false,
+                    confirmedHrefs = emptySet(),
+                    rejectedHrefs = emptySet(),
                     notices = emptyList(),
                     resultMessage = "Sesión cerrada y credenciales eliminadas.",
                     error = null,
@@ -643,5 +805,7 @@ class AccountsViewModel(
     private companion object {
         /** Límite global: si un portal se cuelga, se corta y se conserva el árbol parcial. */
         const val SYNC_TIMEOUT = 6 * 60_000L
+        /** Margen para esperar al estudiante (login manual o confirmación de enlaces). */
+        const val MAX_WATCHDOG_GRACE = 8
     }
 }

@@ -366,6 +366,13 @@ fun SettingsScreen(
                         enabled = ui.prefs.autoSync,
                         onCheckedChange = viewModel::setAutoSyncWifiOnly,
                     )
+                    Spacer(Modifier.height(10.dp))
+                    SettingSwitch(
+                        title = "Modo diagnóstico",
+                        subtitle = "Muestra cada paso y pide confirmar los enlaces clasificados",
+                        checked = ui.prefs.diagnosticMode,
+                        onCheckedChange = viewModel::setDiagnosticMode,
+                    )
                 }
             }
 
@@ -425,7 +432,9 @@ fun SettingsScreen(
                         text = when (ui.model.status) {
                             ModelStatus.READY -> "Modelo listo"
                             ModelStatus.DOWNLOADING -> "Descargando ${ui.model.progress}%"
-                            else -> "Aceptar y descargar modelo"
+                            ModelStatus.ERROR -> "Reintentar descarga"
+                            ModelStatus.WAITING_WIFI -> "Reintentar al tener Wi-Fi"
+                            ModelStatus.MISSING -> "Descargar modelo (~290 MB)"
                         },
                         onClick = viewModel::downloadModel,
                         enabled = !ui.modelReady && !ui.downloading,
@@ -528,7 +537,7 @@ fun SettingsScreen(
                         .padding(vertical = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("StudyLock 0.3.0-beta.4", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
+                    Text("StudyLock 0.3.0-beta.5", style = MaterialTheme.typography.labelMedium, color = SlColors.Muted)
                     Text(
                         "Hecho para estudiantes de la UNJBG",
                         style = MaterialTheme.typography.bodySmall,

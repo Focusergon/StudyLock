@@ -22,8 +22,8 @@ android {
         applicationId = "pe.edu.unjbg.studylock"
         minSdk = 26
         targetSdk = 37
-        versionCode = 6
-        versionName = "0.3.0-beta.4"
+        versionCode = 7
+        versionName = "0.3.0-beta.5"
         vectorDrawables { useSupportLibrary = true }
     }
 

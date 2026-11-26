@@ -35,8 +35,14 @@ class StudyLockNotifications(private val context: Context) {
             NotificationManager.IMPORTANCE_HIGH,
         ).apply { description = "Avisos cuando una aplicación queda limitada" }
 
+        val model = NotificationChannel(
+            CHANNEL_MODEL,
+            "Modelo local",
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply { description = "Descarga del generador y clasificador de enlaces" }
+
         val nm = context.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannels(listOf(access, reminders, alerts))
+        nm.createNotificationChannels(listOf(access, reminders, alerts, model))
     }
 
     fun accessTimer(label: String, remainingSeconds: Int): Notification {
@@ -127,11 +133,50 @@ class StudyLockNotifications(private val context: Context) {
         runCatching { manager.notify(NOTIFY_REMINDER, notification) }
     }
 
+    /** Notificación foreground del worker: se actualiza con el porcentaje real de la descarga. */
+    fun modelForeground(progress: Int, message: String): Notification {
+        val open = PendingIntent.getActivity(
+            context,
+            15,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return NotificationCompat.Builder(context, CHANNEL_MODEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Preparando StudyLock")
+            .setContentText(message.ifBlank { "Descargando modelo local…" })
+            .setContentIntent(open)
+            .setProgress(100, progress.coerceIn(0, 100), progress <= 0)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .build()
+    }
+
+    fun notifyModelReady() {
+        val open = PendingIntent.getActivity(
+            context,
+            16,
+            Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_MODEL)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("StudyLock listo")
+            .setContentText("El modelo local ya puede clasificar enlaces y crear preguntas.")
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .build()
+        runCatching { manager.notify(NOTIFY_MODEL_READY, notification) }
+    }
+
     companion object {
         const val CHANNEL_ACCESS = "access_timer"
         const val CHANNEL_REMINDERS = "reminders"
         const val CHANNEL_ALERTS = "alerts"
+        const val CHANNEL_MODEL = "model_download"
         private const val NOTIFY_BLOCKED = 1001
         private const val NOTIFY_REMINDER = 1002
+        private const val NOTIFY_MODEL_READY = 1003
     }
 }

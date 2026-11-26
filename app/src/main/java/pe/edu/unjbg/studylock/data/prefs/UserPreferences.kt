@@ -31,6 +31,7 @@ data class Prefs(
     val aiModelAccepted: Boolean = false,
     val practiceQuestionsEnabled: Boolean = true,
     val restrictedPermissionAcknowledged: Boolean = false,
+    val diagnosticMode: Boolean = false,
 ) {
     val displayName: String get() = userName.ifBlank { "Estudiante" }
 }
@@ -56,6 +57,7 @@ class UserPreferences(private val context: Context) {
             aiModelAccepted = p[Keys.AI_MODEL_ACCEPTED] ?: false,
             practiceQuestionsEnabled = p[Keys.PRACTICE_QUESTIONS] ?: true,
             restrictedPermissionAcknowledged = p[Keys.RESTRICTED_PERMISSION] ?: false,
+            diagnosticMode = p[Keys.DIAGNOSTIC_MODE] ?: false,
         )
     }
 
@@ -87,6 +89,9 @@ class UserPreferences(private val context: Context) {
     suspend fun setRestrictedPermissionAcknowledged(acknowledged: Boolean) =
         put { it[Keys.RESTRICTED_PERMISSION] = acknowledged }
 
+    /** Muestra cada paso de la vinculación y pide confirmar los enlaces clasificados. */
+    suspend fun setDiagnosticMode(enabled: Boolean) = put { it[Keys.DIAGNOSTIC_MODE] = enabled }
+
     private suspend fun put(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.userDataStore.edit { prefs -> block(prefs) }
     }
@@ -109,5 +114,6 @@ class UserPreferences(private val context: Context) {
         val AI_MODEL_ACCEPTED = booleanPreferencesKey("ai_model_accepted")
         val PRACTICE_QUESTIONS = booleanPreferencesKey("practice_questions_enabled")
         val RESTRICTED_PERMISSION = booleanPreferencesKey("restricted_permission_ack")
+        val DIAGNOSTIC_MODE = booleanPreferencesKey("diagnostic_mode")
     }
 }

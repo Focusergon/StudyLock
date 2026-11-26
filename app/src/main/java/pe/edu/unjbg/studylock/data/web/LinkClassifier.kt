@@ -113,6 +113,29 @@ object LinkClassifier {
         return true
     }
 
+    /** Respaldo determinista cuando el modelo no está listo o devuelve un JSON inválido. */
+    fun heuristicVerdict(link: WebLink, portal: LinkPortal): LinkVerdict {
+        val role = when {
+            isSyllabusLink(link.text, link.href) -> LinkRole.SILABO
+            looksLikeCourse(link.text, link.href) -> LinkRole.CURSO
+            looksLikeSection(link.text) -> LinkRole.SECCION
+            else -> LinkRole.OTRO
+        }
+        val detail = when (role) {
+            LinkRole.CURSO -> "La ruta y el texto parecen una entrada de curso."
+            LinkRole.SILABO -> "El texto o la ruta mencionan un sílabo."
+            LinkRole.SECCION -> "Parece una unidad, semana o tema dentro de un curso."
+            LinkRole.OTRO -> "No hay indicios suficientes en texto o ruta."
+        }
+        return LinkVerdict(
+            link = link,
+            role = role,
+            reason = "Heurística · $detail${if (portal == LinkPortal.AULA) " (Aula)" else " (Intranet)"}",
+            source = VerdictSource.HEURISTICA,
+            confidence = if (role == LinkRole.OTRO) 40 else 65,
+        )
+    }
+
     private fun hostOf(url: String): String =
         runCatching { java.net.URI(url).host.orEmpty().lowercase() }.getOrDefault("")
 

@@ -1,116 +1,47 @@
 package pe.edu.unjbg.studylock.data.ai
 
-import com.google.ai.edge.litertlm.Backend
-import com.google.ai.edge.litertlm.Content
-import com.google.ai.edge.litertlm.Contents
-import com.google.ai.edge.litertlm.Conversation
-import com.google.ai.edge.litertlm.ConversationConfig
-import com.google.ai.edge.litertlm.Engine
-import com.google.ai.edge.litertlm.EngineConfig
-import com.google.ai.edge.litertlm.ResponseFormat
-import com.google.ai.edge.litertlm.SamplerConfig
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import pe.edu.unjbg.studylock.domain.content.AiGeneration
 import pe.edu.unjbg.studylock.domain.content.AiQuestionValidator
 import pe.edu.unjbg.studylock.domain.content.QuestionAiProvider
-import java.io.File
 
 /**
  * Proveedor de preguntas con Gemma 3 270M ejecutado en el propio teléfono (LiteRT-LM, CPU).
  *
- * No envía el material a ningún servidor. Toda la salida pasa por [AiQuestionValidator] antes de
- * devolverse; si el modelo falla o inventa una cita, el generador híbrido usa el respaldo
- * determinista y la experiencia del estudiante no se interrumpe.
+ * No envía el material a ningún servidor. Usa el [LocalAiEngine] compartido con el clasificador de
+ * enlaces y toda la salida pasa por [AiQuestionValidator]; si el modelo falla o inventa una cita, el
+ * generador híbrido usa el respaldo determinista y la experiencia del estudiante no se interrumpe.
  */
 class LocalQuestionAiProvider(
-    private val downloader: ModelDownloader,
-    private val io: CoroutineDispatcher = Dispatchers.IO,
-) : QuestionAiProvider, AutoCloseable {
+    private val engine: LocalAiEngine,
+) : QuestionAiProvider {
 
-    @Volatile
-    private var engine: Engine? = null
-
-    @Volatile
-    private var enginePath: String = ""
-
-    private val lock = Any()
-
-    override fun isAvailable(): Boolean = downloader.verifiedFile() != null
+    override fun isAvailable(): Boolean = engine.isAvailable()
 
     override suspend fun generate(
         topic: String,
         excerpt: String,
         count: Int,
-    ): AiGeneration = withContext(io) {
-        val model = downloader.verifiedFile()
-            ?: return@withContext AiGeneration(error = "El modelo todavía no está descargado.")
+    ): AiGeneration {
+        if (!isAvailable()) {
+            return AiGeneration(error = "El modelo todavía no está descargado.")
+        }
         if (excerpt.length < MIN_EXCERPT) {
-            return@withContext AiGeneration(error = "El material es demasiado corto para la IA.")
+            return AiGeneration(error = "El material es demasiado corto para la IA.")
         }
 
-        var conversation: Conversation? = null
-        try {
-            conversation = engineFor(model).createConversation(
-                ConversationConfig(
-                    systemInstruction = Contents.of(SYSTEM_INSTRUCTION),
-                    samplerConfig = SamplerConfig(topK = 20, topP = 0.9, temperature = 0.2, seed = 7),
-                    maxOutputToken = (count * 110).coerceIn(400, 1_800),
-                    enableResponseFormat = true,
-                )
+        val json = engine.generateJson(
+            LocalAiEngine.Request(
+                systemInstruction = SYSTEM_INSTRUCTION,
+                prompt = buildPrompt(topic, excerpt, count),
+                schema = RESPONSE_SCHEMA,
+                maxOutputTokens = (count * 110).coerceIn(400, 1_800),
             )
-            val answer = conversation.sendMessage(
-                buildPrompt(topic, excerpt, count),
-                responseFormat = ResponseFormat.json(RESPONSE_SCHEMA),
-            )
-            val json = answer.contents.contents
-                .filterIsInstance<Content.Text>()
-                .joinToString("\n") { it.text }
-                .trim()
-            val parsed = AiQuestionValidator.parse(json, excerpt, topic, count)
-            if (parsed.questions.isEmpty()) {
-                AiGeneration(error = parsed.errors.firstOrNull() ?: "El modelo no devolvió preguntas válidas.")
-            } else {
-                AiGeneration(parsed.questions)
-            }
-        } catch (error: Exception) {
-            AiGeneration(error = "El modelo local falló: ${error.message ?: "error desconocido"}")
-        } finally {
-            runCatching { conversation?.close() }
-        }
-    }
-
-    private fun engineFor(model: File): Engine {
-        val cached = engine
-        if (cached != null && enginePath == model.absolutePath && cached.isInitialized()) return cached
-        return synchronized(lock) {
-            val current = engine
-            if (current != null && enginePath == model.absolutePath && current.isInitialized()) {
-                current
-            } else {
-                runCatching { current?.close() }
-                val created = Engine(
-                    EngineConfig(
-                        modelPath = model.absolutePath,
-                        backend = Backend.CPU(),
-                        cacheDir = File(model.parentFile, "cache").absolutePath,
-                        maxNumTokens = 4_096,
-                    )
-                )
-                created.initialize()
-                engine = created
-                enginePath = model.absolutePath
-                created
-            }
-        }
-    }
-
-    override fun close() {
-        synchronized(lock) {
-            runCatching { engine?.close() }
-            engine = null
-            enginePath = ""
+        )
+        val parsed = AiQuestionValidator.parse(json, excerpt, topic, count)
+        return if (parsed.questions.isEmpty()) {
+            AiGeneration(error = parsed.errors.firstOrNull() ?: "El modelo no devolvió preguntas válidas.")
+        } else {
+            AiGeneration(parsed.questions)
         }
     }
 

@@ -15,19 +15,24 @@ se descuentan solo mientras usas esa app.
 > **[docs/INSTALACION.md](docs/INSTALACION.md)** (requisitos, instalación y solución de errores
 > como «App no instalada» o «configuración restringida» de accesibilidad en Android 13+).
 
-> **Beta actual: `v0.3.0-beta.4` (APK firmado, `versionCode 6`).** Se instala directamente sobre
-> `v0.3.0-beta.3` sin desinstalar y conserva cursos, minutos y preferencias.
+> **Beta actual: `v0.3.0-beta.5` (APK firmado, `versionCode 7`).** Se instala directamente sobre
+> `v0.3.0-beta.4` sin desinstalar y conserva cursos, minutos y preferencias.
 >
 > **Descarga fija de betas (siempre apunta a la última):**
 > `https://github.com/Focusergon/StudyLock/releases/download/beta-latest/StudyLock-beta-latest.apk`
 >
-> Corrige el colgamiento de la sincronización: cada llamada JavaScript tiene timeout (4 s), hay un
-> vigilante global de 6 minutos que corta y muestra el árbol parcial, y se registran los pasos del
-> Aula y la Intranet en **Ajustes → Registro de errores**. Los cursos sin archivos también se ven.
-> Mantiene el flujo **«Ya tengo cuenta»** corto, el visor de errores dentro de la app y la
-> sincronización persistente con progreso, ingreso manual y Cancelar. El servidor con mapa del árbol
-> sigue diferido hasta terminar el MVP. El asset del modelo local (`model-gemma3-270m`) aún debe
-> publicarse para que el botón de descarga funcione.
+> El modelo Gemma 3 270M se descarga **al abrir la app**, en segundo plano, con notificación,
+> reanudación del `.part` y reintentos. La vinculación automática espera a que esté verificado y a
+> que existan credenciales del Aula y la Intranet. El **mismo modelo** clasifica los enlaces
+> detectados (curso / sílabo / sección / otro) con JSON estricto y respaldo heurístico; en el
+> **modo diagnóstico** se muestran los enlaces clasificados para confirmar «Esto es un curso /
+> sílabo» o «Esto no», con botones **Continuar / Saltar / Copiar informe**. Se conservan el visor de
+> errores, el timeout de JavaScript (4 s), el vigilante de 6 minutos, el árbol parcial y el flujo
+> «Ya tengo cuenta». El servidor con mapa del árbol sigue diferido hasta terminar el MVP.
+>
+> El asset del modelo (`model-gemma3-270m`) queda pendiente de publicar tras aceptar los términos
+> de Gemma en Hugging Face; la app ya está preparada para descargarlo y verificarlo sin cambiar de
+> versión.
 
 ---
 
@@ -60,8 +65,8 @@ se descuentan solo mientras usas esa app.
   precisión ni rachas. Se pueden desactivar en Ajustes sin afectar a los demás repasos.
 - Progreso: minutos, sesiones, preguntas, aciertos, racha y dominio por curso (sin sesiones `PRUEBA`).
 - Ajustes: permisos del sistema (**Permisos restringidos** primero), meta diaria, recordatorios,
-  emergencia, preguntas de prueba, **Usar generador de preguntas local**, privacidad y reinicio
-  del onboarding.
+  emergencia, preguntas de prueba, **Usar generador de preguntas local**, **Modo diagnóstico** de
+  vinculación, privacidad y reinicio del onboarding.
 - Repetición espaciada tipo SM-2 simplificada (`ReviewScheduler`) y priorización de temas
   débiles (`Topic.priority`).
 
@@ -71,16 +76,20 @@ se descuentan solo mientras usas esa app.
   reutilizar la del Aula). Un **mini-navegador visible** inicia sesión como lo haría una persona y
   **recorre** las páginas para descubrir cursos → secciones → archivos, sin depender de endpoints
   concretos. De ahí sale un **árbol** con selección por archivo y la generación de preguntas.
-- **Sincronización automática**: al abrir la app, como máximo una vez cada 24 h y solo si hay
-  credenciales guardadas. Por defecto solo por Wi-Fi; se puede desactivar en Ajustes. El avance se
-  muestra en el mismo mini-navegador visible.
+- **Sincronización automática**: cuando el modelo local ya está verificado y hay credenciales del
+  Aula y la Intranet, como máximo una vez cada 24 h. Por defecto solo por Wi-Fi; se puede desactivar
+  en Ajustes. El avance se muestra en el mismo mini-navegador visible.
 - **Texto pegado** o **archivo `.txt`/`.md`/`.pdf`** (extractor de PDF propio, sin dependencias).
 - `QuestionGenerator` (respaldo determinista) detecta temas y crea preguntas de completar,
   definición y procesos con distractores sacados del propio material.
 - `HybridQuestionGenerator` intenta primero con **Gemma 3 270M local** (LiteRT-LM, CPU) y, si el
   modelo no está descargado, desactivado o incumple las reglas, cae al respaldo sin interrumpir.
-- El modelo se descarga **una sola vez** desde un GitHub Release, se verifica por SHA-256 y no
-  necesita clave de API ni envía tu material a ningún servidor.
+- El modelo se descarga **una sola vez** desde un GitHub Release, **al abrir la app**, con
+  WorkManager: notificación de progreso, reanudación si se corta y reintentos con backoff. Se
+  verifica por SHA-256 y no necesita clave de API ni envía tu material a ningún servidor.
+- El mismo modelo clasifica los enlaces del Aula y la Intranet antes de recorrerlos.
+  `LinkVerdictParser` exige JSON estricto, un índice por enlace, categoría conocida y motivo no
+  vacío; si algo falla se usan heurísticas y nunca se crea un curso a partir de una salida dudosa.
 - `AiQuestionValidator` exige JSON estricto, 4 opciones únicas, índice correcto válido,
   explicación no vacía y una **cita literal del material**; si algo falla, se descarta.
 - Los PDFs originales se copian físicamente a `unjbg/cursos/<curso>/<sección>/…` o
@@ -249,6 +258,8 @@ app/src/main/java/pe/edu/unjbg/studylock/
   `HybridQuestionGenerator` combina el modelo local con `QuestionGenerator`. `QuestionAiProvider`
   permite sustituir LiteRT sin tocar la UI.
 - **Modelo**: `AiModel.DOWNLOAD_URL` apunta a un GitHub Release; el binario no se versiona.
+  `LocalAiEngine` es el único motor LiteRT y lo comparten `LocalQuestionAiProvider` y
+  `AiLinkClassifier`. `ModelDownloadWorker` programado desde `AppGraph` hace la descarga silenciosa.
 - **Backend**: no hay backend propio. El ledger local sigue siendo la verdad en el dispositivo.
 - **Hilt**: reemplazar `AppGraph` por módulos, manteniendo constructores por interfaz.
 
@@ -315,7 +326,8 @@ para la comunidad UNJBG. `isAccessibilityTool="false"` está declarado en la con
 - El generador determinista es el respaldo; la IA local solo se usa si el modelo fue descargado y
   sus respuestas pasan todas las validaciones. Su calidad todavía no se ha probado en un dispositivo real.
 - El Release `model-gemma3-270m` debe publicarse con el archivo `gemma3-270m-it-q8.litertlm` para
-  que el botón «Aceptar y descargar modelo» funcione. El binario no se incluye en el repositorio.
+  que la descarga automática y el botón «Descargar / Reintentar» funcionen. El binario no se incluye
+  en el repositorio y requiere aceptar los términos de Gemma en Hugging Face.
 - El descubrimiento de contenido es **heurístico** (recorre enlaces del mismo sitio que parecen
   secciones): si el campus cambia de estructura pueden aparecer menos archivos; hay respaldo de
   inicio de sesión manual en la propia ventana si la web pide intervención.
@@ -327,10 +339,11 @@ para la comunidad UNJBG. `isAccessibilityTool="false"` está declarado en la con
   del APK conviene revisar en Ajustes que siga activo.
 - La lista de apps conocidas para preselección es estática; se puede ampliar en
   `InstalledAppsLoader.knownCategories`.
-- Hay 98 tests JVM de la lógica pura (`RewardPolicy`, `PermissionStatus`, `ReviewScheduler`,
+- Hay 104 tests JVM de la lógica pura (`RewardPolicy`, `PermissionStatus`, `ReviewScheduler`,
   `TimeUtils`, `QuestionGenerator`, `QuestionProgression`, `ContentMerger`, `CourseSuggester`,
   `AiQuestionValidator`, `HybridQuestionGenerator`, `PdfTextExtractor`, `SmartReminder`,
-  `HistoryStats`, franjas libres, clasificador de enlaces y scripts del mini-navegador), pero todavía
+  `HistoryStats`, franjas libres, clasificador de enlaces, validador de clasificación y scripts del
+  mini-navegador), pero todavía
   no hay tests instrumentados de UI ni pruebas en dispositivos reales (login UNJBG, WebView,
   descarga/carga del modelo e inferencia).
 

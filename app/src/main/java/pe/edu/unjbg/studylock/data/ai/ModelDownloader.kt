@@ -3,7 +3,11 @@ package pe.edu.unjbg.studylock.data.ai
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import pe.edu.unjbg.studylock.core.log.StudyLockLog
 import pe.edu.unjbg.studylock.data.network.NetworkStatus
 import java.io.File
 import java.io.RandomAccessFile
@@ -29,11 +33,12 @@ data class ModelState(
 )
 
 /**
- * Descarga el modelo en streaming y solo lo acepta si coincide la longitud y el SHA-256.
+ * Descarga el modelo en streaming, reanuda el archivo `.part` si la descarga se cortó y solo lo
+ * acepta si coincide la longitud y el SHA-256.
  *
- * El binario no se versiona: se publica en un GitHub Release y se guarda en el almacenamiento
- * privado de la app. El archivo `.sha256` es un sidecar local que evita recalcular el hash en cada
- * arranque; la verificación real siempre se hace sobre los bytes descargados.
+ * El estado se expone como [StateFlow]: la pantalla de Ajustes, la sincronización automática y el
+ * worker ven el mismo progreso aunque se navegue a otra ruta. El binario no se versiona: se publica
+ * en un GitHub Release y se guarda en el almacenamiento privado de la app.
  */
 class ModelDownloader(
     context: Context,
@@ -44,13 +49,28 @@ class ModelDownloader(
     private val partFile = File(baseDir, "${AiModel.FILE_NAME}.part")
     private val sidecar = File(baseDir, "${AiModel.FILE_NAME}.sha256")
 
+    private val _state = MutableStateFlow(ModelState())
+    val stateFlow: StateFlow<ModelState> = _state.asStateFlow()
+
     init {
         baseDir.mkdirs()
+        _state.value = diskState()
     }
 
-    fun state(): ModelState {
+    fun state(): ModelState = _state.value
+
+    /** Recalcula el estado leyendo el disco, por ejemplo al volver de segundo plano. */
+    fun refresh() {
+        _state.value = diskState()
+    }
+
+    private fun diskState(): ModelState {
         val file = verifiedFile() ?: return ModelState(ModelStatus.MISSING)
-        return ModelState(ModelStatus.READY, 100, "${file.length() / 1_048_576L} MB verificados")
+        return ModelState(
+            ModelStatus.READY,
+            100,
+            "${file.length() / 1_048_576L} MB verificados",
+        )
     }
 
     /** Solo devuelve la ruta cuando el modelo pasó la verificación. */
@@ -66,45 +86,61 @@ class ModelDownloader(
 
     suspend fun download(
         wifiOnly: Boolean = true,
-        onProgress: (Int) -> Unit = {},
+        onProgress: suspend (Int) -> Unit = {},
     ): ModelState = withContext(Dispatchers.IO) {
         verifiedFile()?.let {
-            return@withContext ModelState(ModelStatus.READY, 100, "El modelo ya está listo.")
+            val ready = ModelState(ModelStatus.READY, 100, "El modelo ya está listo.")
+            _state.value = ready
+            onProgress(100)
+            return@withContext ready
+        }
+        if (!network.isConnected()) {
+            return@withContext fail("No hay conexión a internet. Se reintentará automáticamente.")
         }
         if (wifiOnly && !network.isWifi()) {
             return@withContext ModelState(
                 ModelStatus.WAITING_WIFI,
                 0,
                 "Conéctate a Wi-Fi para descargar el modelo (~290 MB).",
-            )
-        }
-        if (!network.isConnected()) {
-            return@withContext ModelState(ModelStatus.ERROR, 0, "No hay conexión a internet.")
+            ).also { _state.value = it }
         }
 
+        _state.value = ModelState(ModelStatus.DOWNLOADING, 0, "Preparando la descarga del modelo…")
         var connection: HttpURLConnection? = null
         try {
+            val digest = MessageDigest.getInstance("SHA-256")
+            var offset = partFile.length().takeIf { it in 1 until AiModel.EXPECTED_BYTES } ?: 0L
+            if (offset > 0) {
+                StudyLockLog.log("Modelo", "Reanudando descarga desde ${offset / 1_048_576L} MB")
+                hashPart(digest, partFile, offset)
+            } else {
+                truncatePart()
+            }
+
             connection = URL(AiModel.DOWNLOAD_URL).openConnection() as HttpURLConnection
             connection.instanceFollowRedirects = true
             connection.connectTimeout = 20_000
             connection.readTimeout = 30_000
             connection.requestMethod = "GET"
-            if (connection.responseCode !in 200..299) {
-                return@withContext ModelState(
-                    ModelStatus.ERROR,
-                    0,
-                    "No se pudo descargar (HTTP ${connection.responseCode}). " +
-                        "Comprueba que el Release del modelo esté publicado.",
-                )
+            if (offset > 0) connection.setRequestProperty("Range", "bytes=$offset-")
+
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                return@withContext fail("No se pudo descargar (HTTP $code). Se reintentará automáticamente.")
+            }
+            // Si el servidor ignoró Range, empezamos de cero; si respondió 206, continuamos.
+            if (offset > 0 && code != HttpURLConnection.HTTP_PARTIAL) {
+                StudyLockLog.log("Modelo", "El servidor ignoró la reanudación; se reinicia la descarga")
+                offset = 0
+                digest.reset()
+                truncatePart()
             }
 
-            val total = connection.contentLength.takeIf { it > 0 }?.toLong() ?: AiModel.EXPECTED_BYTES
-            val digest = MessageDigest.getInstance("SHA-256")
-            var bytes = 0L
+            var bytes = offset
             var lastPercent = -1
             connection.inputStream.use { input ->
                 RandomAccessFile(partFile, "rw").use { output ->
-                    output.setLength(0)
+                    output.seek(bytes)
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
                         ensureActive()
@@ -113,9 +149,11 @@ class ModelDownloader(
                         output.write(buffer, 0, read)
                         digest.update(buffer, 0, read)
                         bytes += read
-                        val percent = ((bytes * 100) / total).toInt().coerceIn(0, 99)
+                        val percent = ((bytes * 100) / AiModel.EXPECTED_BYTES)
+                            .toInt().coerceIn(0, 99)
                         if (percent != lastPercent) {
                             lastPercent = percent
+                            publish(percent, "Descargando modelo… $percent%")
                             onProgress(percent)
                         }
                     }
@@ -123,39 +161,65 @@ class ModelDownloader(
             }
 
             if (bytes != AiModel.EXPECTED_BYTES) {
-                partFile.delete()
-                return@withContext ModelState(
-                    ModelStatus.ERROR,
-                    0,
-                    "La descarga está incompleta (${bytes / 1_048_576L} MB). Inténtalo de nuevo.",
-                )
+                keepForRetry("La descarga está incompleta (${bytes / 1_048_576L} MB).")
             }
             val hash = digest.digest().joinToString("") { "%02x".format(it) }
             if (!hash.equals(AiModel.SHA256, ignoreCase = true)) {
                 partFile.delete()
-                return@withContext ModelState(
-                    ModelStatus.ERROR,
-                    0,
-                    "El archivo no pasó la verificación SHA-256. No se guardó.",
-                )
+                return@withContext fail("El archivo no pasó la verificación SHA-256. No se guardó.")
             }
 
             if (!partFile.renameTo(modelFile)) {
                 modelFile.delete()
-                if (!partFile.renameTo(modelFile)) {
-                    partFile.delete()
-                    return@withContext ModelState(ModelStatus.ERROR, 0, "No se pudo guardar el modelo.")
-                }
+                if (!partFile.renameTo(modelFile)) return@withContext fail("No se pudo guardar el modelo.")
             }
             writeSidecar(hash)
+            publish(100, "Modelo listo para clasificar enlaces y generar preguntas sin internet.")
             onProgress(100)
-            ModelState(ModelStatus.READY, 100, "Modelo listo para generar preguntas sin internet.")
+            StudyLockLog.log("Modelo", "Modelo verificado y guardado (${AiModel.EXPECTED_BYTES} bytes)")
+            _state.value
         } catch (error: Exception) {
             ensureActive()
-            ModelState(ModelStatus.ERROR, 0, "No se pudo descargar: ${error.message ?: "error desconocido"}")
+            fail("No se pudo descargar: ${error.message ?: "error desconocido"}")
         } finally {
             connection?.disconnect()
         }
+    }
+
+    private fun publish(progress: Int, message: String) {
+        _state.value = ModelState(ModelStatus.DOWNLOADING, progress, message)
+    }
+
+    private fun fail(message: String): ModelState {
+        StudyLockLog.warning("Modelo", message)
+        return ModelState(ModelStatus.ERROR, 0, message).also { _state.value = it }
+    }
+
+    /** Conserva el `.part` para que el siguiente intento no vuelva a empezar de cero. */
+    private fun keepForRetry(message: String): Nothing {
+        StudyLockLog.warning("Modelo", message)
+        throw IllegalStateException(message)
+    }
+
+    private fun hashPart(digest: MessageDigest, file: File, length: Long) {
+        var remaining = length
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (remaining > 0) {
+                val read = input.read(buffer, 0, minOf(buffer.size, remaining.toInt()))
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+                remaining -= read
+            }
+        }
+        if (remaining != 0L) {
+            digest.reset()
+            runCatching { RandomAccessFile(file, "rw").use { it.setLength(0) } }
+        }
+    }
+
+    private fun truncatePart() {
+        runCatching { RandomAccessFile(partFile, "rw").use { it.setLength(0) } }
     }
 
     private fun hashMatches(file: File): Boolean = runCatching {
