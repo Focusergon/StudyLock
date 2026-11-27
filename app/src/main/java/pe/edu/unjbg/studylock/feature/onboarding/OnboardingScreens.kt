@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -68,6 +69,7 @@ import pe.edu.unjbg.studylock.core.designsystem.SlTextButton
 import pe.edu.unjbg.studylock.core.designsystem.SlTextField
 import pe.edu.unjbg.studylock.core.designsystem.SlTopBar
 import pe.edu.unjbg.studylock.core.util.PermissionUtils
+import pe.edu.unjbg.studylock.R
 import pe.edu.unjbg.studylock.ui.rememberPermissionStatus
 
 @Composable
@@ -84,15 +86,11 @@ fun WelcomeScreen(onStart: () -> Unit, onConnect: () -> Unit, onLogs: () -> Unit
                 .padding(horizontal = 26.dp, vertical = 20.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(13.dp))
-                        .background(Color.White.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-                }
+                Image(
+                    painter = painterResource(R.drawable.studylock_logo),
+                    contentDescription = "Logo de StudyLock",
+                    modifier = Modifier.size(42.dp),
+                )
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = "StudyLock",

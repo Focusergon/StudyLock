@@ -1,5 +1,6 @@
 package pe.edu.unjbg.studylock.feature.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -48,6 +50,7 @@ import pe.edu.unjbg.studylock.core.designsystem.SlProgressBar
 import pe.edu.unjbg.studylock.core.designsystem.SlScreen
 import pe.edu.unjbg.studylock.core.designsystem.SlSectionLabel
 import pe.edu.unjbg.studylock.core.util.TimeUtils
+import pe.edu.unjbg.studylock.R
 import pe.edu.unjbg.studylock.domain.model.Mastery
 import pe.edu.unjbg.studylock.navigation.Routes
 import pe.edu.unjbg.studylock.ui.LocalAppGraph
@@ -85,6 +88,12 @@ fun HomeScreen(
         ) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Image(
+                        painter = painterResource(R.drawable.studylock_logo),
+                        contentDescription = "Logo de StudyLock",
+                        modifier = Modifier.size(30.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Hola, ${ui.dashboard?.userName?.substringBefore(' ') ?: "Alex"}",

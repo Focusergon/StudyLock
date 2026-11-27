@@ -15,8 +15,8 @@ se descuentan solo mientras usas esa app.
 > **[docs/INSTALACION.md](docs/INSTALACION.md)** (requisitos, instalación y solución de errores
 > como «App no instalada» o «configuración restringida» de accesibilidad en Android 13+).
 
-> **Beta actual: `v0.3.0-beta.5` (APK firmado, `versionCode 7`).** Se instala directamente sobre
-> `v0.3.0-beta.4` sin desinstalar y conserva cursos, minutos y preferencias.
+> **Beta actual: `v0.3.0-beta.6` (APK firmado, `versionCode 8`).** Se instala directamente sobre
+> `v0.3.0-beta.5` sin desinstalar y conserva cursos, minutos y preferencias.
 >
 > **Descarga fija de betas (siempre apunta a la última):**
 > `https://github.com/Focusergon/StudyLock/releases/download/beta-latest/StudyLock-beta-latest.apk`
