@@ -9,7 +9,7 @@ class LinkClassifierTest {
 
     @Test
     fun `detecta enlaces de archivo`() {
-        assertTrue(LinkClassifier.looksLikeFile("https://aulavirtual.unjbg.edu.pe/a/silabo.pdf"))
+        assertTrue(LinkClassifier.looksLikeFile("https://aula.unjbg.edu.pe/a/silabo.pdf"))
         assertTrue(LinkClassifier.looksLikeFile("https://x.edu.pe/archivos/123"))
         assertTrue(LinkClassifier.looksLikeFile("https://x.edu.pe/files/guia.docx"))
         assertFalse(LinkClassifier.looksLikeFile("https://x.edu.pe/curso/12"))
@@ -81,5 +81,172 @@ class LinkClassifierTest {
         assertFalse(LinkClassifier.isCrawlableLink("Cerrar sesión", "https://x.edu.pe/logout", base))
         assertFalse(LinkClassifier.isCrawlableLink("Guía", "https://x.edu.pe/curso/1/guia.pdf", base))
         assertFalse(LinkClassifier.isCrawlableLink("Otro sitio", "https://otro.com/curso/1", base))
+    }
+
+    @Test
+    fun `plan de estudios no cuenta como silabo`() {
+        val link = WebLink(
+            "Plan de estudios",
+            "https://intranet.unjbg.edu.pe/alumno/malla-curricular",
+        )
+
+        assertFalse(LinkClassifier.isSyllabusLink(link.text, link.href))
+        val verdict = LinkClassifier.heuristicVerdict(link, LinkPortal.INTRANET)
+        assertEquals(LinkRole.OTRO, verdict.role)
+        assertTrue(listOf(verdict).acceptedByDefault().isEmpty())
+    }
+
+    @Test
+    fun `reconoce cursos reales del aula pero no el menu de cursos`() {
+        assertTrue(
+            LinkClassifier.looksLikeCourse(
+                "Cálculo I",
+                "https://aula.unjbg.edu.pe/course/view.php?id=123",
+            ),
+        )
+        assertTrue(
+            LinkClassifier.looksLikeCourse(
+                "Redes",
+                "https://aula.unjbg.edu.pe/cursos/2026-I/redes",
+            ),
+        )
+        assertFalse(
+            LinkClassifier.looksLikeCourse(
+                "Mis cursos",
+                "https://aula.unjbg.edu.pe/mis-cursos",
+            ),
+        )
+        assertFalse(
+            LinkClassifier.looksLikeCourse(
+                "Mis cursos",
+                "https://aula.unjbg.edu.pe/cursos",
+            ),
+        )
+    }
+
+    @Test
+    fun `usa el contexto para nombrar un curso sin texto`() {
+        val url = "https://aula.unjbg.edu.pe/course/view.php?id=25474"
+        assertEquals(
+            "Ingeniería en Informática y Sistemas 2026-II",
+            LinkClassifier.displayLabel(
+                "",
+                url,
+                "Ingeniería en Informática y Sistemas 2026-II Ver curso",
+            ),
+        )
+        assertEquals("view.php", LinkClassifier.displayLabel("", url, ""))
+        assertEquals(
+            "Ingeniería en Informática y Sistemas 26-II",
+            LinkClassifier.displayLabel(
+                "",
+                url,
+                "Ingeniería en Informática y Sistemas 26-II ESIS INGENIERÍA W Ver curso",
+            ),
+        )
+    }
+
+    @Test
+    fun `el nombre del curso no es el de la carrera`() {
+        val url = "https://aula.unjbg.edu.pe/course/view.php?id=25474"
+        val full = "Ingeniería en Informática y Sistemas 26-II ESIS " +
+            "INGENIERÍA WEB Y APLICACIONES MÓVILES-A F2 Acceso"
+        assertEquals(
+            "INGENIERÍA WEB Y APLICACIONES MÓVILES-A",
+            LinkClassifier.courseLabel("", url, full),
+        )
+        assertEquals(
+            "SEGURIDAD INFORMÁTICA-B",
+            LinkClassifier.courseLabel(
+                "26-II ESIS SEGURIDAD INFORMÁTICA-B F2",
+                url,
+                "",
+            ),
+        )
+        assertEquals(
+            "INGENIERÍA WEB Y APLICACIONES MÓVILES-A",
+            LinkClassifier.courseLabel("Acceso", url, full),
+        )
+    }
+
+    @Test
+    fun `no salta a otro curso ni a paginas genericas`() {
+        val base = "https://aula.unjbg.edu.pe/course/view.php?id=25474"
+        assertFalse(
+            LinkClassifier.isWithin(
+                "https://aula.unjbg.edu.pe/course/view.php?id=25448",
+                base,
+            ),
+        )
+        assertFalse(
+            LinkClassifier.isWithin(
+                "https://aula.unjbg.edu.pe/course/index.php?categoryid=894",
+                base,
+            ),
+        )
+        assertFalse(LinkClassifier.isWithin("https://aula.unjbg.edu.pe/", base))
+        assertTrue(
+            LinkClassifier.isWithin(
+                "https://aula.unjbg.edu.pe/mod/resource/view.php?id=12345",
+                base,
+            ),
+        )
+    }
+
+    @Test
+    fun `no recorre horarios ni listados del campus`() {
+        val base = "https://aula.unjbg.edu.pe/course/view.php?id=25474"
+        assertFalse(
+            LinkClassifier.isCrawlableLink(
+                "HORARIOS DE CLASE 2026-II",
+                "https://aula.unjbg.edu.pe/mod/page/view.php?id=359254",
+                base,
+            ),
+        )
+        assertFalse(
+            LinkClassifier.isCrawlableLink(
+                "Ingeniería en Informática y Sistemas",
+                "https://aula.unjbg.edu.pe/course/index.php?categoryid=894",
+                base,
+            ),
+        )
+        assertFalse(
+            LinkClassifier.isCrawlableLink(
+                "AULA VIRTUAL UNJBG",
+                "https://aula.unjbg.edu.pe/",
+                base,
+            ),
+        )
+        assertFalse(
+            LinkClassifier.isCrawlableLink(
+                "Foro",
+                "https://aula.unjbg.edu.pe/mod/forum/view.php?id=2&lang=en",
+                base,
+            ),
+        )
+        assertFalse(
+            LinkClassifier.isCrawlableLink(
+                "Foro",
+                "https://aula.unjbg.edu.pe/mod/forum/view.php?id=2",
+                base,
+            ),
+        )
+        assertFalse(
+            LinkClassifier.isCrawlableLink(
+                "Suscribirse",
+                "https://aula.unjbg.edu.pe/mod/forum/subscribe.php?id=2&sesskey=abc",
+                base,
+            ),
+        )
+    }
+
+    @Test
+    fun `una categoria del aula no es un curso`() {
+        assertFalse(
+            LinkClassifier.looksLikeCourse(
+                "Ingeniería en Informática y Sistemas",
+                "https://aula.unjbg.edu.pe/course/index.php?categoryid=894",
+            ),
+        )
     }
 }

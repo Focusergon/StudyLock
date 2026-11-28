@@ -19,6 +19,8 @@ import pe.edu.unjbg.studylock.core.text.PdfTextExtractor
 import pe.edu.unjbg.studylock.data.ai.ModelDownloader
 import pe.edu.unjbg.studylock.data.ai.ModelStatus
 import pe.edu.unjbg.studylock.data.auth.CredentialStore
+import pe.edu.unjbg.studylock.data.auth.DEFAULT_AULA_URL
+import pe.edu.unjbg.studylock.data.auth.DEFAULT_INTRANET_URL
 import pe.edu.unjbg.studylock.data.auth.UnjbgCredentials
 import pe.edu.unjbg.studylock.data.content.ContentPaths
 import pe.edu.unjbg.studylock.data.content.ContentStore
@@ -108,8 +110,8 @@ data class AccountsUi(
 
 /** Valores por defecto de los portales de la UNJBG (editables desde la pantalla). */
 object AccountsDefaults {
-    const val AULA_URL = "https://aulavirtual.unjbg.edu.pe"
-    const val INTRANET_URL = "https://intranet.unjbg.edu.pe"
+    const val AULA_URL = DEFAULT_AULA_URL
+    const val INTRANET_URL = DEFAULT_INTRANET_URL
 }
 
 /**

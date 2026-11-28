@@ -15,11 +15,18 @@ se descuentan solo mientras usas esa app.
 > **[docs/INSTALACION.md](docs/INSTALACION.md)** (requisitos, instalación y solución de errores
 > como «App no instalada» o «configuración restringida» de accesibilidad en Android 13+).
 
-> **Beta actual: `v0.3.0-beta.6` (APK firmado, `versionCode 8`).** Se instala directamente sobre
-> `v0.3.0-beta.5` sin desinstalar y conserva cursos, minutos y preferencias.
+> **Beta actual: `v0.3.0-beta.7` (APK firmado, `versionCode 9`).** Se instala directamente sobre
+> `v0.3.0-beta.6` sin desinstalar y conserva cursos, minutos y preferencias.
 >
 > **Descarga fija de betas (siempre apunta a la última):**
 > `https://github.com/Focusergon/StudyLock/releases/download/beta-latest/StudyLock-beta-latest.apk`
+>
+> Esta beta corrige la vinculación UNJBG: el Aula se abre en `https://aula.unjbg.edu.pe/` (se
+> migran enlaces guardados del dominio antiguo), el clasificador local usa esquemas JSON válidos
+> para LiteRT y acepta respuestas parciales completadas con heurísticas, y se descartan los cursos
+> inventados y los falsos sílabos («Plan de estudios», «Malla curricular», «Horario de clase»).
+> Los cursos sin texto se nombran desde el contenedor de la tarjeta y el recorrido ya no sigue
+> portadas, categorías ni páginas de otros cursos como secciones propias.
 >
 > El modelo Gemma 3 270M se descarga **al abrir la app**, en segundo plano, con notificación,
 > reanudación del `.part` y reintentos. La vinculación automática espera a que esté verificado y a

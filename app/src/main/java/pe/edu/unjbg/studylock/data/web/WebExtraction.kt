@@ -30,6 +30,9 @@ internal suspend fun UnjbgWebSession.loginWith(
     /** La UI confirma «Ya terminé el ingreso»; por defecto se espera un margen corto. */
     awaitManual: suspend () -> Unit = {},
 ): Boolean {
+    // El Aula (Angular) puede pintar el formulario después del primer render: esperar un poco
+    // evita creer que ya hay sesión cuando todavía estamos en la pantalla de acceso.
+    waitUntil("!!document.querySelector('input[type=password]')", 6_000, 300)
     if (!hasPasswordField()) return true
     status(loginMessage)
     submitLogin(user, password)
@@ -40,8 +43,8 @@ internal suspend fun UnjbgWebSession.loginWith(
 }
 
 /** Espera a que la página termine de pintar contenido dinámico (Angular) antes de leerla. */
-internal suspend fun UnjbgWebSession.settle(timeoutMs: Long = 3_000L) {
-    waitUntil("document.querySelectorAll('a[href]').length >= 2", timeoutMs, intervalMs = 250)
+internal suspend fun UnjbgWebSession.settle(timeoutMs: Long = 3_000L, minAnchors: Int = 2) {
+    waitUntil("document.querySelectorAll('a[href]').length >= $minAnchors", timeoutMs, intervalMs = 250)
 }
 
 /** Convierte un enlace de la página en un archivo del árbol, o `null` si no es un documento. */
@@ -96,7 +99,7 @@ internal suspend fun UnjbgWebSession.crawlSections(
 
         links.asSequence()
             .filter { LinkClassifier.isCrawlableLink(it.text, it.href, startUrl) }
-            .filter { LinkClassifier.isWithin(it.href, startUrl) || LinkClassifier.looksLikeSection(it.text) }
+            .filter { LinkClassifier.isWithin(it.href, startUrl) }
             .map { it.href }
             .forEach { queue += it }
     }

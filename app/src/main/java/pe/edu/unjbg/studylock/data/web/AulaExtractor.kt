@@ -27,6 +27,7 @@ class AulaExtractor(
         onPartial: (List<ContentCourse>, Int, Int) -> Unit = { _, _, _ -> Unit },
     ): ExtractionResult {
         status("Abriendo el Aula Virtual…")
+        StudyLockLog.log("Diagnóstico", "Aula · URL: $baseUrl")
         StudyLockLog.log("Diagnóstico", "Aula · paso 1: abrir portal")
         session.open(baseUrl)
 
@@ -43,7 +44,13 @@ class AulaExtractor(
         }
 
         status("Buscando tus cursos…")
-        session.settle()
+        session.settle(timeoutMs = 10_000L, minAnchors = 8)
+        StudyLockLog.log(
+            "Diagnóstico",
+            "Aula · página: ${session.currentUrl()} · " +
+                session.runJs(WebScripts.pageTitle()).orEmpty().take(80) +
+                " · texto: " + session.pageText().replace('\n', ' ').take(180),
+        )
         val allLinks = session.collectLinks()
         StudyLockLog.log("Diagnóstico", "Aula · paso 2: ${allLinks.size} enlace(s) detectado(s)")
 
@@ -59,6 +66,9 @@ class AulaExtractor(
         val accepted = confirmLinks(verdicts)
         val courses = verdicts
             .filter { it.href in accepted && it.role == LinkRole.CURSO }
+            // Cada curso aparece tres veces (tarjeta, texto del código y «Acceso»): se prefiere
+            // la variante con texto más completo antes de deduplicar por URL.
+            .sortedByDescending { it.link.text.trim().length }
             .distinctBy { LinkClassifier.canonical(it.href) }
             .take(MAX_COURSES)
         StudyLockLog.log("Aula", "Enlaces detectados: ${allLinks.size} · cursos confirmados: ${courses.size}")
@@ -74,7 +84,11 @@ class AulaExtractor(
 
         val tree = ArrayList<ContentCourse>()
         courses.forEachIndexed { index, verdict ->
-            val name = verdict.label
+            val name = LinkClassifier.courseLabel(
+                verdict.link.text,
+                verdict.href,
+                verdict.link.context,
+            )
             status("Revisando «${name.take(42)}» (${index + 1}/${courses.size})…")
             StudyLockLog.log("Diagnóstico", "Aula · paso 4.${index + 1}: revisando ${name.take(60)}")
             val sections = session.crawlSections(verdict.href, maxPages = MAX_PAGES_PER_COURSE)

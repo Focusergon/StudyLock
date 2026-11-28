@@ -26,6 +26,7 @@ class IntranetExtractor(
         onPartial: (List<ContentCourse>, Int, Int) -> Unit = { _, _, _ -> Unit },
     ): ExtractionResult {
         status("Abriendo la Intranet…")
+        StudyLockLog.log("Diagnóstico", "Intranet · URL: $baseUrl")
         StudyLockLog.log("Diagnóstico", "Intranet · paso 1: abrir portal")
         session.open(baseUrl)
 
@@ -42,7 +43,13 @@ class IntranetExtractor(
         }
 
         status("Buscando sílabos…")
-        session.settle()
+        session.settle(timeoutMs = 10_000L, minAnchors = 8)
+        StudyLockLog.log(
+            "Diagnóstico",
+            "Intranet · página: ${session.currentUrl()} · " +
+                session.runJs(WebScripts.pageTitle()).orEmpty().take(80) +
+                " · texto: " + session.pageText().replace('\n', ' ').take(180),
+        )
         val allLinks = session.collectLinks()
         StudyLockLog.log("Diagnóstico", "Intranet · paso 2: ${allLinks.size} enlace(s) detectado(s)")
 

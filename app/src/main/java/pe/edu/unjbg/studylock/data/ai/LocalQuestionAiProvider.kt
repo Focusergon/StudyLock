@@ -70,23 +70,23 @@ class LocalQuestionAiProvider(
             "Eres un profesor universitario que crea micro-preguntas de repaso. Respondes únicamente con JSON válido."
         const val RESPONSE_SCHEMA = """
             {
-              "type": "OBJECT",
+              "type": "object",
               "properties": {
                 "questions": {
-                  "type": "ARRAY",
+                  "type": "array",
                   "items": {
-                    "type": "OBJECT",
+                    "type": "object",
                     "properties": {
-                      "prompt": { "type": "STRING" },
-                      "options": { "type": "ARRAY", "items": { "type": "STRING" }, "minItems": 4, "maxItems": 4 },
+                      "prompt": { "type": "string" },
+                      "options": { "type": "array", "items": { "type": "string" }, "minItems": 4, "maxItems": 4 },
                       "correct": {
-                        "type": "OBJECT",
-                        "properties": { "index": { "type": "INTEGER", "minimum": 0, "maximum": 3 } },
+                        "type": "object",
+                        "properties": { "index": { "type": "integer", "minimum": 0, "maximum": 3 } },
                         "required": ["index"]
                       },
-                      "explanation": { "type": "STRING" },
-                      "sourceQuote": { "type": "STRING" },
-                      "tier": { "type": "STRING", "enum": ["CONCEPTO", "PROCESO", "GENERAL"] }
+                      "explanation": { "type": "string" },
+                      "sourceQuote": { "type": "string" },
+                      "tier": { "type": "string", "enum": ["CONCEPTO", "PROCESO", "GENERAL"] }
                     },
                     "required": ["prompt", "options", "correct", "explanation", "sourceQuote", "tier"]
                   }

@@ -11,6 +11,11 @@ import kotlinx.coroutines.flow.map
 
 private val Context.secureDataStore by preferencesDataStore(name = "studylock_secure")
 
+const val DEFAULT_AULA_URL = "https://aula.unjbg.edu.pe/"
+const val DEFAULT_INTRANET_URL = "https://intranet.unjbg.edu.pe"
+
+private const val LEGACY_AULA_URL = "https://aulavirtual.unjbg.edu.pe"
+
 /**
  * Credenciales de UNJBG que el estudiante decide guardar.
  *
@@ -23,8 +28,8 @@ data class UnjbgCredentials(
     val intranetUser: String = "",
     val intranetPassword: String = "",
     val samePassword: Boolean = true,
-    val aulaUrl: String = "https://aulavirtual.unjbg.edu.pe",
-    val intranetUrl: String = "https://intranet.unjbg.edu.pe",
+    val aulaUrl: String = DEFAULT_AULA_URL,
+    val intranetUrl: String = DEFAULT_INTRANET_URL,
 ) {
     /** Usuario de la Intranet; si no se indicó, se reutiliza el del Aula Virtual. */
     val effectiveIntranetUser: String get() = intranetUser.ifBlank { aulaUser }
@@ -58,8 +63,8 @@ class CredentialStore(
             intranetUser = cipher.decrypt(prefs[Keys.INTRANET_USER].orEmpty()),
             intranetPassword = cipher.decrypt(prefs[Keys.INTRANET_PASSWORD].orEmpty()),
             samePassword = prefs[Keys.SAME_PASSWORD] ?: true,
-            aulaUrl = prefs[Keys.AULA_URL].takeUnless { it.isNullOrBlank() } ?: "https://aulavirtual.unjbg.edu.pe",
-            intranetUrl = prefs[Keys.INTRANET_URL].takeUnless { it.isNullOrBlank() } ?: "https://intranet.unjbg.edu.pe",
+            aulaUrl = normalizeAulaUrl(prefs[Keys.AULA_URL]),
+            intranetUrl = prefs[Keys.INTRANET_URL].takeUnless { it.isNullOrBlank() } ?: DEFAULT_INTRANET_URL,
         )
     }
 
@@ -74,13 +79,22 @@ class CredentialStore(
                 if (credentials.samePassword) "" else credentials.intranetPassword,
             )
             prefs[Keys.SAME_PASSWORD] = credentials.samePassword
-            prefs[Keys.AULA_URL] = credentials.aulaUrl.ifBlank { "https://aulavirtual.unjbg.edu.pe" }
-            prefs[Keys.INTRANET_URL] = credentials.intranetUrl.ifBlank { "https://intranet.unjbg.edu.pe" }
+            prefs[Keys.AULA_URL] = normalizeAulaUrl(credentials.aulaUrl)
+            prefs[Keys.INTRANET_URL] = credentials.intranetUrl.ifBlank { DEFAULT_INTRANET_URL }
         }
     }
 
     suspend fun clear() {
         context.secureDataStore.edit { it.clear() }
+    }
+
+    /** Migra la URL antigua del Aula a la nueva sin pisar una URL personalizada del estudiante. */
+    private fun normalizeAulaUrl(value: String?): String {
+        val trimmed = value?.trim().orEmpty()
+        return when {
+            trimmed.isBlank() || trimmed.trimEnd('/') == LEGACY_AULA_URL.trimEnd('/') -> DEFAULT_AULA_URL
+            else -> trimmed
+        }
     }
 
     private object Keys {

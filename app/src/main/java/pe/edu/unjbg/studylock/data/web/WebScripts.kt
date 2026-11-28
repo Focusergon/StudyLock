@@ -85,13 +85,18 @@ object WebScripts {
           function contextOf(el){
             if (!el || !el.parentElement) return '';
             var node = el.parentElement;
-            var last = '';
-            for (var i=0; node && i<3; i++, node = node.parentElement) {
+            var best = '';
+            var fallback = '';
+            var action = /^(ver curso|ir al curso|continuar|ingresar|abrir|omitir mis cursos|saltar al contenido|ver más información|ver mas informacion|más información|mas informacion|clic aquí|click aqui|omitir|saltar)\b/i;
+            for (var i=0; node && i<5; i++, node = node.parentElement) {
               var t = (node.innerText || '').replace(/\s+/g,' ').trim();
-              if (t.length > last.length) last = t;
-              if (last.length >= 20) break;
+              if (t.length < 4) continue;
+              if (t.length > fallback.length) fallback = t;
+              var meaningful = t.replace(action, '').trim();
+              if (meaningful.length >= 8 && (!best || meaningful.length < best.length)) best = meaningful;
+              if (best && best.length < 90) break;
             }
-            return last.slice(0, 160);
+            return (best || fallback).slice(0, 160);
           }
           var anchors = document.querySelectorAll('a[href]');
           for (var i=0;i<anchors.length;i++) add(textOf(anchors[i]), anchors[i].href, 'a', anchors[i]);
